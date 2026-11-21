@@ -1,8 +1,14 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { hashPassword } from '../src/lib/auth/password';
 
-const prisma = new PrismaClient();
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) throw new Error('DATABASE_URL is not set.');
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString, maxUses: 1 }),
+});
 const PASSWORD = 'password123';
 
 function monthStart(offsetMonths: number, now = new Date()): Date {

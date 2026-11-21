@@ -93,7 +93,8 @@ Sessions are database-backed and custom (no Auth.js):
 - `getSessionUser()` returns the user with active memberships and tenant records, or
   deletes the row when expired.
 - Sign-out deletes the session row and the cookie, so a copied cookie stops working.
-- Passwords are hashed with Argon2id (`@node-rs/argon2`, 19 MiB, 2 iterations).
+- Passwords are hashed with Argon2id (`@noble/hashes`, pure JavaScript, so it runs
+  on Cloudflare Workers) and stored as PHC-encoded strings.
 - Failed sign-ins are rate limited per email: 5 failures per 15 minutes.
 
 ## Tests

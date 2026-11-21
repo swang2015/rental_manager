@@ -6,6 +6,8 @@ export default tseslint.config(
   {
     ignores: [
       '.next/**',
+      '.open-next/**',
+      '.wrangler/**',
       'node_modules/**',
       'coverage/**',
       'playwright-report/**',

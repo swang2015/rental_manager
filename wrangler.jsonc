@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rental-manager",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-11-21",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "rental-manager"
+    }
+  ],
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      // Replace with the id printed by:
+      //   wrangler hyperdrive create rental-manager --connection-string="postgres://..."
+      "id": "REPLACE_WITH_HYPERDRIVE_ID"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

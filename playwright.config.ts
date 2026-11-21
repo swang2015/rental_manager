@@ -1,4 +1,7 @@
+import { config as loadEnv } from 'dotenv';
 import { defineConfig } from '@playwright/test';
+
+loadEnv({ path: '.env.test', quiet: true });
 
 const PORT = 3100;
 const baseURL = `http://127.0.0.1:${PORT}`;
@@ -20,11 +23,17 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: `pnpm exec dotenv run -q -f .env.test -- next dev -p ${PORT}`,
+    // A direct `node next` invocation (rather than pnpm -> dotenv -> next)
+    // gives Playwright a single process it can stop cleanly after the run.
+    command: `node node_modules/next/dist/bin/next dev -p ${PORT}`,
     url: `${baseURL}/sign-in`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
     stdout: 'ignore',
-    stderr: 'pipe',
+    stderr: 'ignore',
+    env: {
+      ...(process.env as Record<string, string>),
+      DATABASE_URL: process.env.DATABASE_URL ?? '',
+    },
   },
 });

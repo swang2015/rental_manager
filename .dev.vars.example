@@ -1,0 +1,9 @@
+# Local values for `pnpm preview` / `wrangler dev`.
+# Copy to `.dev.vars` (gitignored) and adjust the connection string.
+
+NEXTJS_ENV=production
+CRON_SECRET=dev-cron-secret
+SESSION_COOKIE_SECURE=false
+
+# Wrangler uses this to emulate the HYPERDRIVE binding locally.
+CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE="postgresql://USER:PASSWORD@localhost:5432/rental_manager?schema=public"
