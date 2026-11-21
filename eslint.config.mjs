@@ -1,0 +1,55 @@
+import js from '@eslint/js';
+import prettier from 'eslint-config-prettier';
+import tseslint from 'typescript-eslint';
+
+export default tseslint.config(
+  {
+    ignores: [
+      '.next/**',
+      'node_modules/**',
+      'coverage/**',
+      'playwright-report/**',
+      'test-results/**',
+      'next-env.d.ts',
+    ],
+  },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  prettier,
+  {
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
+  },
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: [
+      'src/lib/db.ts',
+      'src/lib/db/**',
+      'src/lib/auth/**',
+      // Sign-in, sign-up and onboarding resolve a user before an organization is
+      // known, and the cron route iterates every organization.
+      'src/app/(auth)/**',
+      'src/app/onboarding/**',
+      'src/app/api/cron/**',
+      'prisma/**',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/lib/db',
+              message: 'Use scopedDb(orgId) from @/lib/db/scoped for organization data.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+);

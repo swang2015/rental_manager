@@ -1,0 +1,393 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipRole {
+  OWNER
+  PROPERTY_MANAGER
+  STAFF
+}
+
+enum MembershipStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum InvitationKind {
+  MANAGER
+  TENANT
+}
+
+enum TenantStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum UnitStatus {
+  AVAILABLE
+  OCCUPIED
+  OFF_MARKET
+}
+
+enum LeaseStatus {
+  DRAFT
+  ACTIVE
+  ENDED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CARD
+  OTHER
+}
+
+enum MaintenancePriority {
+  LOW
+  MEDIUM
+  URGENT
+}
+
+enum MaintenanceStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  CANCELLED
+}
+
+enum WorkOrderStatus {
+  SCHEDULED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  timezone  String   @default("UTC")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships         Membership[]
+  invitations         Invitation[]
+  tenants             Tenant[]
+  properties          Property[]
+  units               Unit[]
+  leases              Lease[]
+  rentCharges         RentCharge[]
+  payments            Payment[]
+  adjustments         Adjustment[]
+  maintenanceRequests MaintenanceRequest[]
+  workOrders          WorkOrder[]
+  workOrderEvents     WorkOrderEvent[]
+  requestEvents       RequestEvent[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships      Membership[]
+  sessions         Session[]
+  tenantRecords    Tenant[]             @relation("TenantPortalUser")
+  invitationsSent  Invitation[]         @relation("InvitationSender")
+  paymentsRecorded Payment[]            @relation("PaymentRecorder")
+  adjustments      Adjustment[]         @relation("AdjustmentCreator")
+  requestsCreated  MaintenanceRequest[] @relation("RequestCreator")
+  workOrderEvents  WorkOrderEvent[]     @relation("WorkOrderEventActor")
+  requestEvents    RequestEvent[]       @relation("RequestEventActor")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Membership {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  role           MembershipRole
+  status         MembershipStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workOrders   WorkOrder[]  @relation("WorkOrderAssignee")
+
+  @@unique([organizationId, userId])
+  @@index([organizationId, role])
+}
+
+model Invitation {
+  id              String          @id @default(cuid())
+  organizationId  String
+  email           String
+  kind            InvitationKind
+  role            MembershipRole?
+  tenantId        String?
+  tokenHash       String          @unique
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  invitedByUserId String
+  createdAt       DateTime        @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tenant       Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invitedBy    User         @relation("InvitationSender", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, kind, acceptedAt])
+  @@index([email])
+}
+
+model Tenant {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  email          String
+  phone          String?
+  portalUserId   String?
+  status         TenantStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  portalUser   User?                @relation("TenantPortalUser", fields: [portalUserId], references: [id], onDelete: SetNull)
+  leases       Lease[]
+  requests     MaintenanceRequest[]
+  invitations  Invitation[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId, status])
+  @@index([portalUserId])
+}
+
+model Property {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  addressLine1   String
+  city           String
+  region         String
+  postalCode     String
+  notes          String?
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  units        Unit[]
+
+  @@index([organizationId, archivedAt])
+  @@index([organizationId, name])
+}
+
+model Unit {
+  id              String     @id @default(cuid())
+  organizationId  String
+  propertyId      String
+  label           String
+  bedrooms        Int
+  bathrooms       Float
+  rentAmountCents Int
+  status          UnitStatus @default(AVAILABLE)
+  archivedAt      DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property     Property             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  leases       Lease[]
+  requests     MaintenanceRequest[]
+
+  @@unique([propertyId, label])
+  @@index([organizationId, status])
+  @@index([organizationId, propertyId])
+}
+
+model Lease {
+  id                 String      @id @default(cuid())
+  organizationId     String
+  unitId             String
+  tenantId           String
+  startDate          DateTime    @db.Date
+  endDate            DateTime    @db.Date
+  rentAmountCents    Int
+  depositAmountCents Int
+  dueDay             Int
+  status             LeaseStatus @default(DRAFT)
+  terminationReason  String?
+  predecessorLeaseId String?     @unique
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unit         Unit         @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  charges      RentCharge[]
+  predecessor  Lease?       @relation("LeaseRenewal", fields: [predecessorLeaseId], references: [id], onDelete: SetNull)
+  successor    Lease?       @relation("LeaseRenewal")
+
+  @@index([organizationId, status])
+  @@index([organizationId, unitId])
+  @@index([organizationId, tenantId])
+}
+
+model RentCharge {
+  id             String   @id @default(cuid())
+  organizationId String
+  leaseId        String
+  periodStart    DateTime @db.Date
+  dueDate        DateTime @db.Date
+  amountCents    Int
+  balanceCents   Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lease        Lease        @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  payments     Payment[]
+  adjustments  Adjustment[]
+
+  @@unique([leaseId, periodStart])
+  @@index([organizationId, dueDate])
+  @@index([organizationId, balanceCents])
+}
+
+model Payment {
+  id               String        @id @default(cuid())
+  organizationId   String
+  chargeId         String
+  amountCents      Int
+  paidOn           DateTime      @db.Date
+  method           PaymentMethod
+  reference        String?
+  recordedByUserId String
+  createdAt        DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  charge       RentCharge   @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  recordedBy   User         @relation("PaymentRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, paidOn])
+  @@index([chargeId])
+}
+
+model Adjustment {
+  id              String   @id @default(cuid())
+  organizationId  String
+  chargeId        String
+  amountCents     Int
+  reason          String
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  charge       RentCharge   @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("AdjustmentCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, createdAt])
+  @@index([chargeId])
+}
+
+model MaintenanceRequest {
+  id              String              @id @default(cuid())
+  organizationId  String
+  unitId          String
+  tenantId        String
+  category        String
+  description     String
+  priority        MaintenancePriority @default(MEDIUM)
+  status          MaintenanceStatus   @default(OPEN)
+  triageNote      String?
+  cancelledReason String?
+  createdByUserId String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unit         Unit           @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdBy    User?          @relation("RequestCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  workOrder    WorkOrder?
+  events       RequestEvent[]
+
+  @@index([organizationId, status, priority])
+  @@index([organizationId, unitId])
+}
+
+model WorkOrder {
+  id                   String          @id @default(cuid())
+  organizationId       String
+  requestId            String          @unique
+  assigneeMembershipId String?
+  scheduledFor         DateTime?       @db.Date
+  status               WorkOrderStatus @default(SCHEDULED)
+  resolutionNote       String?
+  closedAt             DateTime?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  request      MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  assignee     Membership?        @relation("WorkOrderAssignee", fields: [assigneeMembershipId], references: [id], onDelete: SetNull)
+  events       WorkOrderEvent[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, assigneeMembershipId])
+}
+
+model WorkOrderEvent {
+  id             String           @id @default(cuid())
+  organizationId String
+  workOrderId    String
+  fromStatus     WorkOrderStatus?
+  toStatus       WorkOrderStatus
+  note           String?
+  actorUserId    String
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workOrder    WorkOrder    @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  actor        User         @relation("WorkOrderEventActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([workOrderId, createdAt])
+}
+
+model RequestEvent {
+  id             String             @id @default(cuid())
+  organizationId String
+  requestId      String
+  fromStatus     MaintenanceStatus?
+  toStatus       MaintenanceStatus
+  note           String?
+  actorUserId    String?
+  createdAt      DateTime           @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  request      MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actor        User?              @relation("RequestEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([requestId, createdAt])
+}
