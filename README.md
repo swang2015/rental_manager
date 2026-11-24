@@ -244,6 +244,65 @@ The same build still runs on Node 20+: set `DATABASE_URL`, `APP_URL`,
 `CRON_SECRET`, and `SESSION_COOKIE_SECURE=true`, then run `pnpm db:deploy`,
 `pnpm build`, and `pnpm start` behind HTTPS.
 
+## Deploy to Railway
+
+The repository includes a `Dockerfile` and `railway.json`, so Railway builds the app
+as a plain Node service. Cloudflare/Hyperdrive is not involved on this path: the app
+reads `DATABASE_URL` directly, and migrations run as the pre-deploy command.
+
+**1. Create the project**
+
+- In Railway, **New Project → Deploy from GitHub repo** and pick `rental_manager`.
+- Add a database: **New → Database → Add PostgreSQL**.
+
+**2. Set the app service variables**
+
+| Variable | Value |
+| --- | --- |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference the Postgres service) |
+| `APP_URL` | `https://<your-domain>` — set it after step 3, then redeploy |
+| `SESSION_COOKIE_SECURE` | `true` |
+| `CRON_SECRET` | long random string, e.g. `openssl rand -hex 32` |
+
+`railway.json` configures the rest:
+
+- build: `Dockerfile` (`prisma generate` + `next build`)
+- pre-deploy: `pnpm db:deploy`, so migrations apply before the new release starts
+- start: `pnpm start`, which binds `0.0.0.0` on Railway's `PORT`
+- health check: `/api/health` (returns 503 until `SELECT 1` succeeds)
+
+**3. Generate a domain**
+
+**Settings → Networking → Generate Domain**, then copy the URL into `APP_URL` and
+redeploy. Sign in at `https://<domain>/sign-in`.
+
+Demo data is optional: run `pnpm db:seed` once against the Railway database (from a
+one-off shell or `DATABASE_URL=<public URL> pnpm db:seed` from your machine).
+
+**4. Scheduled charge generation (optional)**
+
+Create a second service from the same repository (same image; no public domain
+needed), give it the same `APP_URL` and `CRON_SECRET`, and configure it as a cron
+job with schedule `0 1 * * *` and command:
+
+```bash
+node scripts/generate-charges.mjs
+```
+
+The script calls `/api/cron/generate-charges` with the bearer secret and exits, so the
+cron service does not run the web server. The endpoint is idempotent; reruns are safe.
+
+**Railway CLI shortcut**
+
+```bash
+railway login
+railway link                                  # select the project
+railway variables --set "CRON_SECRET=$(openssl rand -hex 32)"
+railway up                                    # build and deploy this directory
+```
+
+`pnpm deploy` still targets Cloudflare Workers; the Docker path is independent.
+
 ## Test coverage map
 
 | Capability | Automated coverage |

@@ -28,6 +28,17 @@ export default tseslint.config(
     },
   },
   {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        fetch: 'readonly',
+        process: 'readonly',
+        URL: 'readonly',
+      },
+    },
+  },
+  {
     files: ['src/**/*.{ts,tsx}'],
     ignores: [
       'src/lib/db.ts',
@@ -38,6 +49,8 @@ export default tseslint.config(
       'src/app/(auth)/**',
       'src/app/onboarding/**',
       'src/app/api/cron/**',
+      // The health probe only runs `SELECT 1`, it reads no organization data.
+      'src/app/api/health/**',
       'prisma/**',
     ],
     rules: {
