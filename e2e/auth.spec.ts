@@ -79,3 +79,23 @@ test('a manager invitation can be accepted and opens the workspace', async ({ pa
   await expect(page.getByText('E2E Manager').first()).toBeVisible();
   await expect(page.getByText('Property manager').first()).toBeVisible();
 });
+
+test('the platform administrator opens the console and any workspace', async ({ page }) => {
+  await signIn(page, 'admin@rental.test');
+  await page.waitForURL('**/admin');
+
+  await expect(page.getByRole('heading', { name: 'Organizations' })).toBeVisible();
+  await expect(page.getByText('Sunrise Rentals').first()).toBeVisible();
+
+  await page.getByRole('button', { name: 'Open workspace' }).first().click();
+  await page.waitForURL('**/dashboard');
+  await expect(page.getByRole('link', { name: 'All organizations' })).toBeVisible();
+});
+
+test('an owner cannot open the admin console', async ({ page }) => {
+  await signIn(page, 'owner@sunrise.test');
+  await page.waitForURL('**/dashboard');
+
+  await page.goto('/admin');
+  await expect(page).toHaveURL(/\/dashboard$/);
+});

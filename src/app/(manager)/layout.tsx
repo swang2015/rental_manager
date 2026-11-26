@@ -25,7 +25,8 @@ export default async function ManagerLayout({ children }: { children: React.Reac
           <div>
             <p className="text-sm font-semibold">{context.organization.name}</p>
             <p className="text-xs text-slate-500">
-              {context.user.name} · {ROLE_LABEL[role] ?? role}
+              {context.user.name} ·{' '}
+              {context.isSuperAdmin ? 'Superadmin' : (ROLE_LABEL[role] ?? role)}
             </p>
           </div>
           <form action={signOutAction}>
@@ -48,6 +49,14 @@ export default async function ManagerLayout({ children }: { children: React.Reac
               className="rounded-md px-3 py-1.5 text-sm text-slate-700 no-underline hover:bg-slate-100"
             >
               Members
+            </Link>
+          ) : null}
+          {context.isSuperAdmin ? (
+            <Link
+              href="/admin"
+              className="rounded-md px-3 py-1.5 text-sm text-sky-800 no-underline hover:bg-sky-50"
+            >
+              All organizations
             </Link>
           ) : null}
         </nav>

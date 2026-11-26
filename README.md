@@ -42,7 +42,9 @@ pnpm db:seed                # optional demo data
 pnpm dev
 ```
 
-Open <http://localhost:3000>.
+Open <http://localhost:3000>. The first account you register at `/sign-up` becomes the
+platform administrator (superadmin). That is the only self-service registration:
+afterwards `/sign-up` closes and everyone else joins through invitation links.
 
 If PostgreSQL was installed with Homebrew and is not on `PATH`:
 
@@ -65,6 +67,7 @@ export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
 
 | Account | Role |
 | --- | --- |
+| `admin@rental.test` | Platform administrator (superadmin, no organization) |
 | `owner@sunrise.test` | Owner, Sunrise Rentals |
 | `manager@sunrise.test` | Property manager, Sunrise Rentals |
 | `staff@sunrise.test` | Staff, Sunrise Rentals |
@@ -74,6 +77,30 @@ export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
 
 The seed creates overdue, partially paid, and paid charges and one in-progress
 maintenance request, so every screen has something to show.
+
+### Accounts and roles
+
+There is no self-service sign-up by default:
+
+1. The **first** account created at `/sign-up` is the **platform administrator**
+   (`isSuperAdmin`). Registration closes after that.
+2. The superadmin creates organizations at `/admin`, optionally generating an
+   **owner invitation link** for each one. Organizations are not tied to an email
+   address and one installation can hold many organizations.
+3. Owners invite property managers and staff from **Members**; managers invite
+   tenants from the tenant page. Invitations are links you copy and send — the app
+   does not send email.
+4. A superadmin can open any organization's workspace with full owner permissions
+   from `/admin`; the manager header shows an **All organizations** link to switch
+   back.
+
+If a database already has users (for example, deployed before this model existed),
+promote an account instead of registering:
+
+```bash
+psql "$DATABASE_URL" -c \
+  'UPDATE "User" SET "isSuperAdmin" = true WHERE email = '\''you@example.com'\'';'
+```
 
 ## Scripts
 
@@ -274,7 +301,9 @@ reads `DATABASE_URL` directly, and migrations run as the pre-deploy command.
 **3. Generate a domain**
 
 **Settings → Networking → Generate Domain**, then copy the URL into `APP_URL` and
-redeploy. Sign in at `https://<domain>/sign-in`.
+redeploy. Open `https://<domain>/sign-up` to create the administrator account (only
+the first registration is accepted), then go to `/admin` to create your first
+organization and invite its owner. Sign in later at `https://<domain>/sign-in`.
 
 Demo data is optional: run `pnpm db:seed` once against the Railway database (from a
 one-off shell or `DATABASE_URL=<public URL> pnpm db:seed` from your machine).

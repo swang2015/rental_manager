@@ -5,6 +5,7 @@ import { Alert, Field, buttonClass, inputClass } from '@/components/ui';
 import { SubmitButton } from '@/components/submit-button';
 import { getSessionUser, homePathForUser } from '@/lib/auth/session';
 import { searchParam } from '@/lib/actions/helpers';
+import { prisma } from '@/lib/db';
 
 export default async function SignUpPage({
   searchParams,
@@ -16,12 +17,29 @@ export default async function SignUpPage({
 
   const params = await searchParams;
   const error = searchParam(params, 'error');
+  const userCount = await prisma.user.count();
+
+  if (userCount > 0) {
+    return (
+      <>
+        <h1 className="mb-1 text-xl font-semibold">Registration is closed</h1>
+        <p className="mb-4 text-sm text-slate-600">
+          This installation already has an administrator. Ask them to send you an invitation link,
+          or sign in if you already have an account.
+        </p>
+        <Link href="/sign-in" className={`${buttonClass} block text-center`}>
+          Go to sign in
+        </Link>
+      </>
+    );
+  }
 
   return (
     <>
-      <h1 className="mb-1 text-xl font-semibold">Create your workspace</h1>
+      <h1 className="mb-1 text-xl font-semibold">Create the administrator account</h1>
       <p className="mb-4 text-sm text-slate-600">
-        Set up an organization for your rental portfolio. You become its owner.
+        This is the first account for this installation, so it becomes the platform administrator.
+        You can create organizations and invite people after signing in.
       </p>
       <Alert error={error} />
       <form action={signUpAction} className="space-y-4">
@@ -40,21 +58,8 @@ export default async function SignUpPage({
             className={inputClass}
           />
         </Field>
-        <Field label="Organization name">
-          <input name="organizationName" required className={inputClass} />
-        </Field>
-        <Field label="Timezone" hint="Used to decide when rent is overdue.">
-          <select name="timezone" defaultValue="Asia/Shanghai" className={inputClass}>
-            <option value="Asia/Shanghai">Asia/Shanghai</option>
-            <option value="Asia/Singapore">Asia/Singapore</option>
-            <option value="Europe/London">Europe/London</option>
-            <option value="America/New_York">America/New_York</option>
-            <option value="America/Los_Angeles">America/Los_Angeles</option>
-            <option value="UTC">UTC</option>
-          </select>
-        </Field>
         <SubmitButton className={`${buttonClass} w-full`} pendingLabel="Creating…">
-          Create workspace
+          Create administrator account
         </SubmitButton>
       </form>
       <p className="mt-4 text-sm text-slate-600">

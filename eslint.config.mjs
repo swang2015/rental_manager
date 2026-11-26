@@ -48,6 +48,8 @@ export default tseslint.config(
       // known, and the cron route iterates every organization.
       'src/app/(auth)/**',
       'src/app/onboarding/**',
+      // The platform admin console lists and creates organizations globally.
+      'src/app/admin/**',
       'src/app/api/cron/**',
       // The health probe only runs `SELECT 1`, it reads no organization data.
       'src/app/api/health/**',
