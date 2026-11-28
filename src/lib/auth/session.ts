@@ -59,7 +59,6 @@ export async function getSessionUser() {
           },
           vendors: {
             where: { status: 'ACTIVE' },
-            include: { owner: true },
             orderBy: { createdAt: 'asc' },
           },
         },
@@ -187,7 +186,6 @@ export async function requireVendor() {
   return {
     user,
     vendor,
-    owner: vendor.owner,
     vendorIds: user.vendors.map((entry) => entry.id),
   };
 }

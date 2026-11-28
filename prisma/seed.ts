@@ -96,10 +96,9 @@ async function main() {
   });
 
   const vendor = await prisma.vendor.upsert({
-    where: { ownerUserId_userId: { ownerUserId: owner.id, userId: vendorUser.id } },
+    where: { userId: vendorUser.id },
     update: { status: 'ACTIVE' },
     create: {
-      ownerUserId: owner.id,
       userId: vendorUser.id,
       name: vendorUser.name,
       company: 'Vic Plumbing Co.',

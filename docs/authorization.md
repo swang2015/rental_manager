@@ -23,7 +23,9 @@ Owners are platform-level. A property belongs to exactly one owner through
 ## Ownership isolation
 
 Every owner-owned table carries `ownerUserId` (properties, units, leases, charges,
-payments, adjustments, maintenance, work orders, tenants, vendors, invitations).
+payments, adjustments, maintenance, work orders, tenants, tenant invitations).
+`Vendor` is platform-wide and has no `ownerUserId`; every owner reads the same
+directory.
 Data access goes through `scopedDb(ownerUserId)` from `src/lib/db/scoped.ts`:
 
 - `findMany`, `findFirst`, `findFirstOrThrow`, `count`, `aggregate`, `groupBy`,
@@ -39,6 +41,7 @@ The bare `@/lib/db` client may only be imported by:
   known),
 - `src/app/(auth)/**`, `src/app/onboarding/**`, `src/app/admin/**`,
   `src/app/api/cron/**`,
+- `src/lib/domain/vendors.ts` (the shared vendor directory),
 - `src/lib/domain/vendor-portal.ts` (queries are filtered by the signed-in vendor's
   `Vendor.userId`),
 - `prisma/**`.

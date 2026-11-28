@@ -87,7 +87,6 @@ model User {
   sessions         Session[]
   properties       Property[]           @relation("PropertyOwner")
   tenantDirectory  Tenant[]             @relation("TenantOwner")
-  vendorDirectory  Vendor[]             @relation("VendorOwner")
   tenancies        Tenant[]             @relation("TenantUser")
   vendors          Vendor[]             @relation("VendorUser")
   invitationsSent  Invitation[]         @relation("InvitationSender")
@@ -166,24 +165,21 @@ model Tenant {
 }
 
 model Vendor {
-  id             String       @id @default(cuid())
-  ownerUserId    String
-  userId         String
-  name           String
-  company        String?
-  trade          String?
-  phone          String?
-  status         VendorStatus @default(ACTIVE)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id        String       @id @default(cuid())
+  userId    String       @unique
+  name      String
+  company   String?
+  trade     String?
+  phone     String?
+  status    VendorStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
-  owner      User        @relation("VendorOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
   user       User        @relation("VendorUser", fields: [userId], references: [id], onDelete: Cascade)
   workOrders WorkOrder[]
 
-  @@unique([ownerUserId, userId])
-  @@index([ownerUserId, status])
-  @@index([userId])
+  @@index([status, trade])
+  @@index([name])
 }
 
 model Property {

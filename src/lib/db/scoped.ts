@@ -8,7 +8,6 @@ import { prisma } from '@/lib/db';
 const SCOPED_MODELS = new Set([
   'Invitation',
   'Tenant',
-  'Vendor',
   'Property',
   'Unit',
   'Lease',

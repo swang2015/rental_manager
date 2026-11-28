@@ -10,6 +10,10 @@ and vendors:
 - **Vendor portal** — work orders assigned to the vendor, with status updates and
   a job history.
 
+Vendors are a **platform-wide directory**: the same contractor can serve several
+owners. Owners pick from the directory when they create a work order, and the
+vendor whose trade matches the maintenance category is suggested first.
+
 One email address can hold several roles at once (owner, tenant, and/or vendor).
 There is no organization layer: each property belongs to exactly one owner, and
 every owner sees only their own portfolio.
@@ -92,12 +96,15 @@ maintenance request, so every screen has something to show.
    `/admin`.
 3. The administrator can also generate an **owner invitation link**. Owners are
    approved immediately when they accept it.
-4. Owners invite tenants from **Tenants** and vendors from **Vendors**. Invitations
-   are links you copy and send — the app does not send email. Accepting adds the
-   role to the account and creates the owner's tenant/vendor record.
-5. A superadmin can open any owner's workspace with full permissions from
+4. Owners invite tenants from **Tenants**. Tenants and vendors can also submit an
+   account request. Invitations are links you copy and send — the app does not send
+   email. Accepting adds the role to the account (and creates the owner's tenant
+   record for tenant invitations).
+5. Vendors are platform-wide: the administrator invites or approves them, and every
+   owner sees the same directory. Owners cannot edit vendor profiles.
+6. A superadmin can open any owner's workspace with full permissions from
    `/admin`; the workspace header has a **Platform admin** link to switch back.
-6. One email can hold multiple roles. The header links to the other portals when
+7. One email can hold multiple roles. The header links to the other portals when
    the signed-in account also has those roles.
 
 The current release resets the old organization-based schema (see the init
@@ -145,7 +152,8 @@ docs/                   authorization, invitations, billing
 
 ## Key rules
 
-- Every owner-owned query goes through `scopedDb(ownerUserId)`. Direct
+- Every owner-owned query goes through `scopedDb(ownerUserId)`. Vendors are global
+  and are deliberately not scoped; the directory lives in `src/lib/domain/vendors.ts`. Direct
   `@/lib/db` imports outside auth/db/cron modules fail lint. See
   [docs/authorization.md](docs/authorization.md).
 - Every mutation is a server action that re-checks the caller's role and ownership.

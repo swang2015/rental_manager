@@ -132,3 +132,26 @@ test('an application is approved by the platform administrator', async ({ page }
   await page.waitForURL('**/dashboard');
   await expect(page.getByText('Pending Owner').first()).toBeVisible();
 });
+
+test('an approved vendor application lands in the vendor portal', async ({ page }) => {
+  await page.goto('/sign-up');
+  await page.getByLabel('Your name').fill('New Vendor');
+  await page.getByLabel('Email').fill('newvendor@e2e.test');
+  await page.getByLabel('Password').fill('password123');
+  await page.getByLabel('I am a').selectOption('VENDOR');
+  await page.getByRole('button', { name: 'Request access' }).click();
+  await page.waitForURL('**/onboarding');
+  await signOut(page);
+
+  await signIn(page, 'admin@rental.test');
+  await page.waitForURL('**/admin');
+  const row = page.getByRole('row', { name: /New Vendor/ });
+  await row.locator('select').selectOption('VENDOR');
+  await row.getByRole('button', { name: 'Approve' }).click();
+  await expect(page.getByText('Account approved.')).toBeVisible();
+  await signOut(page);
+
+  await signIn(page, 'newvendor@e2e.test');
+  await page.waitForURL('**/vendor');
+  await expect(page.getByRole('heading', { name: 'Assigned work orders' })).toBeVisible();
+});

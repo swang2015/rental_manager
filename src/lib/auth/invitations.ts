@@ -25,8 +25,8 @@ export async function createInvitation(input: CreateInvitationInput) {
   const email = input.email.trim().toLowerCase();
 
   assertCondition(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email), 'Enter a valid email address.');
-  if (input.role === 'TENANT' || input.role === 'VENDOR') {
-    assertCondition(Boolean(input.ownerUserId), 'An owner is required for this invitation.');
+  if (input.role === 'TENANT') {
+    assertCondition(Boolean(input.ownerUserId), 'An owner is required for a tenant invitation.');
   }
 
   await prisma.invitation.create({
@@ -129,11 +129,9 @@ export async function acceptInvitation(input: {
     }
 
     if (valid.role === 'VENDOR') {
-      const ownerUserId = assertFound(valid.ownerUserId, 'The invitation is missing its owner.');
       await tx.vendor.upsert({
-        where: { ownerUserId_userId: { ownerUserId, userId: user.id } },
+        where: { userId: user.id },
         create: {
-          ownerUserId,
           userId: user.id,
           name: user.name,
           phone: user.phone,

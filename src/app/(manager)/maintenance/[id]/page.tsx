@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireManager } from '@/lib/auth/session';
 import { getRequest, listAssignableVendors } from '@/lib/domain/maintenance';
+import { vendorMatchesCategory } from '@/lib/domain/vendors';
 import {
   cancelRequestAction,
   createWorkOrderAction,
@@ -59,6 +60,11 @@ export default async function MaintenanceDetailPage({
   if (!request) notFound();
 
   const vendors = await listAssignableVendors(context.db);
+  const suggestedVendors = vendors.filter((vendor) =>
+    vendorMatchesCategory(vendor, request.category),
+  );
+  const otherVendors = vendors.filter((vendor) => !suggestedVendors.includes(vendor));
+  const defaultVendorId = suggestedVendors[0]?.id ?? '';
   const workOrder = request.workOrder;
   const terminal = request.status === 'CANCELLED' || request.status === 'CLOSED';
   const nextStatuses = workOrder ? (NEXT_STATUS[workOrder.status] ?? []) : [];
@@ -195,12 +201,24 @@ export default async function MaintenanceDetailPage({
                     defaultValue={workOrder.vendorId ?? ''}
                     className={inputClass}
                   >
-                    {vendors.map((vendor) => (
-                      <option key={vendor.id} value={vendor.id}>
-                        {vendor.name}
-                        {vendor.company ? ` · ${vendor.company}` : ''}
-                      </option>
-                    ))}
+                    {suggestedVendors.length > 0 ? (
+                      <optgroup label={`Suggested for ${request.category}`}>
+                        {suggestedVendors.map((vendor) => (
+                          <option key={vendor.id} value={vendor.id}>
+                            {vendor.name}
+                            {vendor.company ? ` · ${vendor.company}` : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                    <optgroup label="All vendors">
+                      {otherVendors.map((vendor) => (
+                        <option key={vendor.id} value={vendor.id}>
+                          {vendor.name}
+                          {vendor.company ? ` · ${vendor.company}` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
                 </Field>
                 <SubmitButton className={secondaryButtonClass}>Reassign</SubmitButton>
@@ -213,18 +231,43 @@ export default async function MaintenanceDetailPage({
               <input type="hidden" name="requestId" value={request.id} />
               <Field
                 label="Assign to"
-                hint={vendors.length === 0 ? 'Add a vendor first.' : undefined}
+                hint={
+                  vendors.length === 0
+                    ? 'The platform administrator has not added any vendors yet.'
+                    : suggestedVendors.length > 0
+                      ? 'The first group matches this category; you can pick any vendor.'
+                      : undefined
+                }
               >
-                <select name="vendorId" required defaultValue="" className={inputClass}>
-                  <option value="" disabled>
-                    {vendors.length === 0 ? 'No vendors yet' : 'Select a vendor'}
-                  </option>
-                  {vendors.map((vendor) => (
-                    <option key={vendor.id} value={vendor.id}>
-                      {vendor.name}
-                      {vendor.company ? ` · ${vendor.company}` : ''}
+                <select
+                  name="vendorId"
+                  required
+                  defaultValue={defaultVendorId}
+                  className={inputClass}
+                >
+                  {vendors.length === 0 ? (
+                    <option value="" disabled>
+                      No vendors available
                     </option>
-                  ))}
+                  ) : null}
+                  {suggestedVendors.length > 0 ? (
+                    <optgroup label={`Suggested for ${request.category}`}>
+                      {suggestedVendors.map((vendor) => (
+                        <option key={vendor.id} value={vendor.id}>
+                          {vendor.name}
+                          {vendor.company ? ` · ${vendor.company}` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                  <optgroup label={suggestedVendors.length > 0 ? 'Other vendors' : 'All vendors'}>
+                    {otherVendors.map((vendor) => (
+                      <option key={vendor.id} value={vendor.id}>
+                        {vendor.name}
+                        {vendor.company ? ` · ${vendor.company}` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
               </Field>
               <Field label="Scheduled date">

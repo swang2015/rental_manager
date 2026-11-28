@@ -79,7 +79,6 @@ export async function createTenant(
 }
 
 export async function createVendor(
-  ownerUserId: string,
   email = `vendor-${randomUUID().slice(0, 8)}@example.test`,
   name = 'Test Vendor',
 ) {
@@ -93,7 +92,7 @@ export async function createVendor(
     },
   });
   return prisma.vendor.create({
-    data: { ownerUserId, userId: user.id, name, company: 'Test Co.', trade: 'Plumbing' },
+    data: { userId: user.id, name, company: 'Test Co.', trade: 'Plumbing' },
   });
 }
 

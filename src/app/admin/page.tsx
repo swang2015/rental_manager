@@ -2,10 +2,14 @@ import { prisma } from '@/lib/db';
 import { requireSuperAdmin } from '@/lib/auth/session';
 import {
   approveUserAction,
+  archiveVendorAction,
   enterOwnerAction,
   inviteOwnerAction,
+  inviteVendorAction,
   rejectUserAction,
+  updateVendorAction,
 } from './actions';
+import { listPendingVendorInvitations, listVendors } from '@/lib/domain/vendors';
 import { searchParam } from '@/lib/actions/helpers';
 import {
   Alert,
@@ -31,7 +35,7 @@ export default async function AdminPage({
   const params = await searchParams;
   const invite = searchParam(params, 'invite');
 
-  const [applicants, owners, ownerInvitations] = await Promise.all([
+  const [applicants, owners, ownerInvitations, vendors, vendorInvitations] = await Promise.all([
     prisma.user.findMany({
       where: { status: 'PENDING' },
       orderBy: { createdAt: 'asc' },
@@ -39,7 +43,7 @@ export default async function AdminPage({
     prisma.user.findMany({
       where: { roles: { some: { role: 'OWNER' } }, status: 'ACTIVE' },
       include: {
-        _count: { select: { properties: true, tenantDirectory: true, vendorDirectory: true } },
+        _count: { select: { properties: true, tenantDirectory: true } },
       },
       orderBy: { createdAt: 'asc' },
     }),
@@ -48,6 +52,8 @@ export default async function AdminPage({
       orderBy: { createdAt: 'desc' },
       include: { invitedBy: true },
     }),
+    listVendors(),
+    listPendingVendorInvitations(),
   ]);
 
   return (
@@ -165,9 +171,7 @@ export default async function AdminPage({
                     {owner._count.properties} propert
                     {owner._count.properties === 1 ? 'y' : 'ies'} · {owner._count.tenantDirectory}{' '}
                     tenant
-                    {owner._count.tenantDirectory === 1 ? '' : 's'} · {owner._count.vendorDirectory}{' '}
-                    vendor
-                    {owner._count.vendorDirectory === 1 ? '' : 's'}
+                    {owner._count.tenantDirectory === 1 ? '' : 's'}
                   </p>
                 </div>
                 <form action={enterOwnerAction}>
@@ -178,6 +182,101 @@ export default async function AdminPage({
             ))}
           </div>
         )}
+      </Card>
+
+      <Card title={`Vendor directory (${vendors.length})`} className="mt-6">
+        <p className="mb-3 text-sm text-slate-600">
+          Vendors are shared across all owners. Approve vendor applications above, or invite one
+          here. Owners can pick anyone from this list; matching is based on the trade field.
+        </p>
+        <form action={inviteVendorAction} className="flex flex-wrap items-end gap-3">
+          <Field label="Vendor email" className="min-w-64 flex-1">
+            <input
+              name="email"
+              type="email"
+              required
+              placeholder="vendor@example.com"
+              className={inputClass}
+            />
+          </Field>
+          <SubmitButton className={buttonClass} pendingLabel="Creating…">
+            Invite vendor
+          </SubmitButton>
+        </form>
+
+        {vendorInvitations.length > 0 ? (
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <p className="mb-2 text-sm font-medium text-slate-700">Pending vendor invitations</p>
+            <ul className="space-y-1 text-sm text-slate-600">
+              {vendorInvitations.map((invitation) => (
+                <li key={invitation.id}>
+                  {invitation.email} · expires {invitation.expiresAt.toISOString().slice(0, 10)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <div className="mt-4 space-y-3">
+          {vendors.length === 0 ? (
+            <p className="text-sm text-slate-600">No vendors yet.</p>
+          ) : (
+            vendors.map((vendor) => (
+              <div key={vendor.id} className="rounded-md border border-slate-200 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium">
+                      {vendor.name}
+                      {vendor.company ? ` · ${vendor.company}` : ''}
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      {vendor.user.email} · {vendor.trade ?? 'No trade set'} ·{' '}
+                      {vendor._count.workOrders} work order
+                      {vendor._count.workOrders === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                  <form action={archiveVendorAction}>
+                    <input type="hidden" name="vendorId" value={vendor.id} />
+                    <SubmitButton
+                      className="text-sm text-rose-700 underline"
+                      confirm="Archive this vendor? Close open work orders first."
+                    >
+                      Archive
+                    </SubmitButton>
+                  </form>
+                </div>
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-sm text-slate-700">Edit</summary>
+                  <form action={updateVendorAction} className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <input type="hidden" name="vendorId" value={vendor.id} />
+                    <input name="name" defaultValue={vendor.name} required className={inputClass} />
+                    <input
+                      name="company"
+                      defaultValue={vendor.company ?? ''}
+                      placeholder="Company"
+                      className={inputClass}
+                    />
+                    <input
+                      name="trade"
+                      defaultValue={vendor.trade ?? ''}
+                      placeholder="Trade (Plumbing, HVAC…)"
+                      className={inputClass}
+                    />
+                    <input
+                      name="phone"
+                      defaultValue={vendor.phone ?? ''}
+                      placeholder="Phone"
+                      className={inputClass}
+                    />
+                    <div className="sm:col-span-2">
+                      <SubmitButton className={secondaryButtonClass}>Save vendor</SubmitButton>
+                    </div>
+                  </form>
+                </details>
+              </div>
+            ))
+          )}
+        </div>
       </Card>
     </>
   );

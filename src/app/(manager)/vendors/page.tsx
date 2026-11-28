@@ -1,7 +1,5 @@
-import Link from 'next/link';
 import { requireManager } from '@/lib/auth/session';
-import { listPendingVendorInvitations, listVendors } from '@/lib/domain/vendors';
-import { inviteVendorAction } from '../vendor-actions';
+import { listVendorTrades, listVendorsForOwner } from '@/lib/domain/vendors';
 import { searchParam } from '@/lib/actions/helpers';
 import {
   Alert,
@@ -10,8 +8,6 @@ import {
   Field,
   PageHeader,
   Table,
-  TextLink,
-  buttonClass,
   inputClass,
   secondaryButtonClass,
 } from '@/components/ui';
@@ -25,98 +21,64 @@ export default async function VendorsPage({
   const context = await requireManager();
   const params = await searchParams;
   const search = searchParam(params, 'q') ?? '';
-  const invite = searchParam(params, 'invite');
+  const trade = searchParam(params, 'trade') ?? '';
 
-  const [vendors, invitations] = await Promise.all([
-    listVendors(context.db, { search }),
-    listPendingVendorInvitations(context.db),
+  const [vendors, trades] = await Promise.all([
+    listVendorsForOwner(context.ownerUserId, { search, trade: trade || undefined }),
+    listVendorTrades(),
   ]);
 
   return (
     <>
       <PageHeader
-        title="Vendors"
-        subtitle="Contractors who can sign in, see assigned work orders, and update progress."
+        title="Vendor directory"
+        subtitle="Shared contractors maintained by the platform. Pick one when you create a work order."
       />
       <Alert error={searchParam(params, 'error')} ok={searchParam(params, 'ok')} />
-      {invite ? (
-        <p className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
-          Share this invitation link: <code>{invite}</code>
-        </p>
-      ) : null}
 
       <Card className="mb-6">
         <form method="get" className="flex flex-wrap items-end gap-3">
           <Field label="Search" className="min-w-56 flex-1">
-            <input
-              name="q"
-              defaultValue={search}
-              placeholder="Name, company, trade"
-              className={inputClass}
-            />
+            <input name="q" defaultValue={search} placeholder="Name, company, trade" className={inputClass} />
+          </Field>
+          <Field label="Trade" className="w-48">
+            <select name="trade" defaultValue={trade} className={inputClass}>
+              <option value="">All trades</option>
+              {trades.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
           </Field>
           <SubmitButton className={secondaryButtonClass}>Filter</SubmitButton>
         </form>
       </Card>
 
-      <Card title="Vendor directory" className="mb-6">
-        <Table head={['Name', 'Company', 'Trade', 'Phone', 'Work orders', '']}>
+      <Card title="Vendors">
+        <Table head={['Name', 'Company', 'Trade', 'Contact', 'Your work orders']}>
           {vendors.length === 0 ? (
-            <EmptyRow colSpan={6}>No vendors yet. Invite one below.</EmptyRow>
+            <EmptyRow colSpan={5}>No vendors match this view.</EmptyRow>
           ) : (
             vendors.map((vendor) => (
               <tr key={vendor.id}>
-                <td className="px-2 py-2">
-                  <TextLink href={`/vendors/${vendor.id}`}>{vendor.name}</TextLink>
-                </td>
+                <td className="px-2 py-2 font-medium">{vendor.name}</td>
                 <td className="px-2 py-2 text-slate-600">{vendor.company ?? '—'}</td>
                 <td className="px-2 py-2 text-slate-600">{vendor.trade ?? '—'}</td>
-                <td className="px-2 py-2 text-slate-600">{vendor.phone ?? '—'}</td>
-                <td className="px-2 py-2">{vendor._count.workOrders}</td>
-                <td className="px-2 py-2 text-right">
-                  <Link href={`/vendors/${vendor.id}`} className="text-sm">
-                    Open
-                  </Link>
+                <td className="px-2 py-2 text-slate-600">
+                  {vendor.phone ?? vendor.user.email}
                 </td>
+                <td className="px-2 py-2">{vendor._count.workOrders}</td>
               </tr>
             ))
           )}
         </Table>
-      </Card>
-
-      <Card title="Invite a vendor" className="mb-6">
-        <p className="mb-3 text-sm text-slate-600">
-          The vendor signs in with this email, sees only work orders assigned to them, and can mark
-          progress. The record appears here once they accept the link (valid for 7 days).
+        <p className="mt-4 text-sm text-slate-600">
+          Vendors are platform-wide, so the same contractor can work for several owners. The
+          platform administrator maintains this list; when you open a maintenance request the
+          vendor whose trade matches the category is suggested first, and you can still choose
+          anyone from the directory.
         </p>
-        <form action={inviteVendorAction} className="flex flex-wrap items-end gap-3">
-          <Field label="Vendor email" className="min-w-64 flex-1">
-            <input
-              name="email"
-              type="email"
-              required
-              placeholder="vendor@example.com"
-              className={inputClass}
-            />
-          </Field>
-          <SubmitButton className={buttonClass} pendingLabel="Creating…">
-            Create invitation link
-          </SubmitButton>
-        </form>
-      </Card>
-
-      <Card title={`Pending invitations (${invitations.length})`}>
-        {invitations.length === 0 ? (
-          <p className="text-sm text-slate-600">No pending vendor invitations.</p>
-        ) : (
-          <ul className="space-y-1 text-sm text-slate-600">
-            {invitations.map((invitation) => (
-              <li key={invitation.id}>
-                {invitation.email} · expires {invitation.expiresAt.toISOString().slice(0, 10)}
-              </li>
-            ))}
-          </ul>
-        )}
       </Card>
     </>
   );

@@ -29,12 +29,18 @@ The link is valid for **7 days**, for that email only, and for a single acceptan
 3. The tenant signs in at `/portal` and sees only their own lease, charges, and
    requests.
 
-## Vendor invitations (owner)
+## Vendor invitations (administrator)
 
-1. Open **Vendors** and enter the vendor's email under **Invite a vendor**.
-2. Once accepted, the platform adds the `VENDOR` role and creates the owner's
-   `Vendor` record. The owner can then fill in company, trade, and phone.
-3. The vendor signs in at `/vendor` and sees only work orders assigned to them. They
+Vendors are a platform-wide directory, not an owner's private list.
+
+1. A vendor can submit an account request at `/sign-up` (role: vendor), or the
+   administrator can invite one from `/admin`.
+2. Accepting adds the `VENDOR` role and creates the global `Vendor` record.
+   The administrator fills in company, trade, and phone.
+3. Every owner sees the same directory at **Vendors** and can pick any vendor when
+   creating a work order; the vendor whose trade matches the category is suggested
+   first.
+4. The vendor signs in at `/vendor` and sees only work orders assigned to them. They
    can move a work order through in progress → resolved → closed and leave notes;
    the owner sees the same status changes.
 
@@ -68,6 +74,6 @@ someone else's at the same time; the workspace headers link between portals.
 ## Data model
 
 `Invitation` stores `email`, `role` (`OWNER`, `TENANT`, or `VENDOR`), `ownerUserId`
-(for tenant/vendor invitations), `tokenHash`, `expiresAt`, `acceptedAt`, and
-`invitedByUserId`. Tenant and vendor records are created on acceptance, not when the
-invitation is generated.
+(tenant invitations only), `tokenHash`, `expiresAt`, `acceptedAt`, and
+`invitedByUserId`. The tenant record is created on acceptance, not when the
+invitation is generated. Vendor records are global and keyed by the account.

@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { createInvitation, invitationPath } from '@/lib/auth/invitations';
 import { requireSuperAdmin, setActiveOwnerCookie } from '@/lib/auth/session';
+import { archiveVendor, updateVendor } from '@/lib/domain/vendors';
 import { fail, formValue, succeed } from '@/lib/actions/helpers';
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -32,6 +33,16 @@ export async function approveUserAction(form: FormData): Promise<void> {
         create: { userId, role },
         update: {},
       }),
+      // Vendor accounts need a directory entry so owners can assign work.
+      ...(role === 'VENDOR'
+        ? [
+            prisma.vendor.upsert({
+              where: { userId },
+              create: { userId, name: user.name, phone: user.phone },
+              update: { status: 'ACTIVE' },
+            }),
+          ]
+        : []),
     ]);
   } catch (error) {
     fail('/admin', error);
@@ -94,4 +105,56 @@ export async function enterOwnerAction(form: FormData): Promise<void> {
 
   await setActiveOwnerCookie(owner.id);
   redirect('/dashboard');
+}
+
+export async function inviteVendorAction(form: FormData): Promise<void> {
+  const admin = await requireSuperAdmin();
+  const email = formValue(form, 'email').toLowerCase();
+
+  let invite: string | undefined;
+  try {
+    if (!EMAIL_PATTERN.test(email)) throw new Error('Enter a valid email address.');
+    const { token } = await createInvitation({
+      email,
+      role: 'VENDOR',
+      invitedByUserId: admin.id,
+    });
+    invite = invitationPath(token);
+  } catch (error) {
+    fail('/admin', error);
+  }
+
+  revalidatePath('/admin');
+  succeed('/admin', 'Vendor invitation ready. Share the link below.', { invite });
+}
+
+export async function updateVendorAction(form: FormData): Promise<void> {
+  await requireSuperAdmin();
+  const vendorId = formValue(form, 'vendorId');
+  try {
+    await updateVendor(vendorId, {
+      name: formValue(form, 'name'),
+      company: formValue(form, 'company') || null,
+      trade: formValue(form, 'trade') || null,
+      phone: formValue(form, 'phone') || null,
+    });
+  } catch (error) {
+    fail('/admin', error);
+  }
+
+  revalidatePath('/admin');
+  succeed('/admin', 'Vendor updated.');
+}
+
+export async function archiveVendorAction(form: FormData): Promise<void> {
+  await requireSuperAdmin();
+  const vendorId = formValue(form, 'vendorId');
+  try {
+    await archiveVendor(vendorId);
+  } catch (error) {
+    fail('/admin', error);
+  }
+
+  revalidatePath('/admin');
+  succeed('/admin', 'Vendor archived.');
 }
