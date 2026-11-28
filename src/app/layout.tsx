@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Rental Manager',
+  title: 'RentEase',
   description: 'Multi-tenant rental management for landlords, managers, and tenants.',
 };
 

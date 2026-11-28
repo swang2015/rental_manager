@@ -1,4 +1,4 @@
-# Rental Manager
+# RentEase
 
 A multi-tenant rental property management SaaS with two surfaces:
 
@@ -171,7 +171,7 @@ your existing provider; Workers reach it through
 **1. Create the Hyperdrive config**
 
 ```bash
-pnpm exec wrangler hyperdrive create rental-manager \
+pnpm exec wrangler hyperdrive create rentease \
   --connection-string="postgresql://USER:PASSWORD@HOST:5432/DATABASE?sslmode=require"
 ```
 

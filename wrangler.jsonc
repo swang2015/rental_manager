@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "rental-manager",
+  "name": "rentease",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-11-21",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
@@ -11,14 +11,14 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "rental-manager"
+      "service": "rentease"
     }
   ],
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
       // Replace with the id printed by:
-      //   wrangler hyperdrive create rental-manager --connection-string="postgres://..."
+      //   wrangler hyperdrive create rentease --connection-string="postgres://..."
       "id": "REPLACE_WITH_HYPERDRIVE_ID"
     }
   ],
