@@ -2,11 +2,14 @@ import Link from 'next/link';
 import { acceptInvitationAction } from '../../actions';
 import { Alert, Field, buttonClass, inputClass } from '@/components/ui';
 import { SubmitButton } from '@/components/submit-button';
-import {
-  findInvitationByToken,
-  invitationPath,
-} from '@/lib/auth/invitations';
+import { findInvitationByToken, invitationPath } from '@/lib/auth/invitations';
 import { searchParam } from '@/lib/actions/helpers';
+
+const ROLE_LABEL: Record<string, string> = {
+  OWNER: 'property owner',
+  TENANT: 'tenant',
+  VENDOR: 'vendor',
+};
 
 export default async function AcceptInvitationPage({
   params,
@@ -27,7 +30,7 @@ export default async function AcceptInvitationPage({
         <p className="mt-2 text-sm text-slate-600">
           {invitation?.acceptedAt
             ? 'This invitation has already been used. Sign in to continue.'
-            : 'This invitation has expired or does not exist. Ask an owner to send a new one.'}
+            : 'This invitation has expired or does not exist. Ask for a new one.'}
         </p>
         <p className="mt-4 text-sm">
           <Link href="/sign-in" className="font-medium text-slate-900">
@@ -38,17 +41,18 @@ export default async function AcceptInvitationPage({
     );
   }
 
+  const headline =
+    invitation.role === 'OWNER'
+      ? 'Join RentEase'
+      : `Join ${invitation.owner?.name ?? 'an owner'}'s portfolio`;
+
   return (
     <>
-      <h1 className="mb-1 text-xl font-semibold">
-        Join {invitation.organization.name}
-      </h1>
+      <h1 className="mb-1 text-xl font-semibold">{headline}</h1>
       <p className="mb-4 text-sm text-slate-600">
-        Invitation for <strong>{invitation.email}</strong>{' '}
-        {invitation.kind === 'MANAGER'
-          ? `as ${invitation.role?.toLowerCase().replace('_', ' ')}`
-          : 'as a tenant'}
-        . If an account with this email already exists, enter its password to confirm.
+        Invitation for <strong>{invitation.email}</strong> as a{' '}
+        {ROLE_LABEL[invitation.role] ?? invitation.role.toLowerCase()}. If an account with this
+        email already exists, enter its password to confirm.
       </p>
       <Alert error={error} />
       <form action={acceptInvitationAction} className="space-y-4">

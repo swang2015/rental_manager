@@ -16,9 +16,22 @@ import {
   inputClass,
 } from '@/components/ui';
 import { SubmitButton } from '@/components/submit-button';
-import { PRIORITY_LABEL, REQUEST_STATUS_LABEL, priorityTone, requestStatusTone } from '@/lib/labels';
+import {
+  PRIORITY_LABEL,
+  REQUEST_STATUS_LABEL,
+  priorityTone,
+  requestStatusTone,
+} from '@/lib/labels';
 
-const CATEGORIES = ['Plumbing', 'Electrical', 'Heating', 'Appliance', 'Structural', 'Pest', 'Other'];
+const CATEGORIES = [
+  'Plumbing',
+  'Electrical',
+  'Heating',
+  'Appliance',
+  'Structural',
+  'Pest',
+  'Other',
+];
 
 export default async function PortalMaintenancePage({
   searchParams,
@@ -51,7 +64,11 @@ export default async function PortalMaintenancePage({
               </select>
             </Field>
             <Field label="Unit">
-              <input value={`${activeLease.unit.property.name} · ${activeLease.unit.label}`} readOnly className={inputClass} />
+              <input
+                value={`${activeLease.unit.property.name} · ${activeLease.unit.label}`}
+                readOnly
+                className={inputClass}
+              />
             </Field>
             <Field label="What is wrong?" className="sm:col-span-2">
               <textarea name="description" rows={3} required className={inputClass} />
@@ -88,7 +105,9 @@ export default async function PortalMaintenancePage({
                 </td>
                 <td className="px-2 py-2 text-slate-600">{request.category}</td>
                 <td className="px-2 py-2">
-                  <Badge tone={priorityTone(request.priority)}>{PRIORITY_LABEL[request.priority]}</Badge>
+                  <Badge tone={priorityTone(request.priority)}>
+                    {PRIORITY_LABEL[request.priority]}
+                  </Badge>
                 </td>
                 <td className="px-2 py-2">
                   <Badge tone={requestStatusTone(request.status)}>

@@ -14,15 +14,15 @@ export default async function PortalContactPage({
 
   return (
     <>
-      <PageHeader title="Contact details" subtitle="How your manager reaches you." />
+      <PageHeader title="Contact details" subtitle="How the property owner reaches you." />
       <Alert error={searchParam(params, 'error')} ok={searchParam(params, 'ok')} />
 
       <Card title="Your details">
         <form action={updatePhoneAction} className="grid max-w-lg gap-4">
-          <Field label="Name" hint="Ask your manager to change your name.">
+          <Field label="Name" hint="Ask the owner to change your name.">
             <input value={context.tenant.name} readOnly className={inputClass} />
           </Field>
-          <Field label="Email" hint="Ask your manager to change your sign-in email.">
+          <Field label="Email" hint="Ask the owner to change your sign-in email.">
             <input value={context.tenant.email} readOnly className={inputClass} />
           </Field>
           <Field label="Phone">

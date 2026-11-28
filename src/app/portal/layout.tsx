@@ -19,7 +19,7 @@ export default async function PortalLayout({ children }: { children: React.React
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div>
-            <p className="text-sm font-semibold">{context.organization.name} · Tenant portal</p>
+            <p className="text-sm font-semibold">{context.owner.name} · Tenant portal</p>
             <p className="text-xs text-slate-500">{context.tenant.name}</p>
           </div>
           <form action={signOutAction}>

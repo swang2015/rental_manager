@@ -18,13 +18,11 @@ import {
   succeed,
 } from '@/lib/actions/helpers';
 
-const MANAGER_ROLES = ['OWNER', 'PROPERTY_MANAGER'] as const;
-
 export async function createLeaseAction(form: FormData): Promise<void> {
-  const { db, organizationId } = await requireManager([...MANAGER_ROLES]);
+  const { db, ownerUserId } = await requireManager();
   let leaseId: string;
   try {
-    const lease = await createDraftLease(db, organizationId, {
+    const lease = await createDraftLease(db, ownerUserId, {
       unitId: formValue(form, 'unitId'),
       tenantId: formValue(form, 'tenantId'),
       startDate: formDate(form, 'startDate'),
@@ -42,7 +40,7 @@ export async function createLeaseAction(form: FormData): Promise<void> {
 }
 
 export async function updateLeaseAction(form: FormData): Promise<void> {
-  const { db } = await requireManager([...MANAGER_ROLES]);
+  const { db } = await requireManager();
   const leaseId = formValue(form, 'leaseId');
   try {
     const rentAmount = formValue(form, 'rentAmount');
@@ -66,10 +64,10 @@ export async function updateLeaseAction(form: FormData): Promise<void> {
 }
 
 export async function activateLeaseAction(form: FormData): Promise<void> {
-  const { db, organizationId } = await requireManager([...MANAGER_ROLES]);
+  const { db, ownerUserId } = await requireManager();
   const leaseId = formValue(form, 'leaseId');
   try {
-    await activateLease(db, organizationId, leaseId);
+    await activateLease(db, ownerUserId, leaseId);
   } catch (error) {
     fail(`/leases/${leaseId}`, error);
   }
@@ -79,11 +77,11 @@ export async function activateLeaseAction(form: FormData): Promise<void> {
 }
 
 export async function renewLeaseAction(form: FormData): Promise<void> {
-  const { db, organizationId } = await requireManager([...MANAGER_ROLES]);
+  const { db, ownerUserId } = await requireManager();
   const leaseId = formValue(form, 'leaseId');
   let successorId: string;
   try {
-    const successor = await renewLease(db, organizationId, leaseId, {
+    const successor = await renewLease(db, ownerUserId, leaseId, {
       unitId: formValue(form, 'unitId'),
       tenantId: formValue(form, 'tenantId'),
       startDate: formDate(form, 'startDate'),
@@ -97,14 +95,17 @@ export async function renewLeaseAction(form: FormData): Promise<void> {
     fail(`/leases/${leaseId}`, error);
   }
   revalidatePath(`/leases/${leaseId}`);
-  succeed(`/leases/${successorId}`, 'Renewal draft created. Activate it to close the current lease.');
+  succeed(
+    `/leases/${successorId}`,
+    'Renewal draft created. Activate it to close the current lease.',
+  );
 }
 
 export async function terminateLeaseAction(form: FormData): Promise<void> {
-  const { db, organizationId } = await requireManager([...MANAGER_ROLES]);
+  const { db, ownerUserId } = await requireManager();
   const leaseId = formValue(form, 'leaseId');
   try {
-    await terminateLease(db, organizationId, leaseId, {
+    await terminateLease(db, ownerUserId, leaseId, {
       endDate: formDate(form, 'endDate'),
       reason: formValue(form, 'reason'),
     });

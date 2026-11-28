@@ -1,76 +1,79 @@
 'use server';
 
-import { randomBytes } from 'node:crypto';
+import type { UserRoleType } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { createInvitation, invitationPath } from '@/lib/auth/invitations';
-import { requireSuperAdmin, setActiveOrganizationCookie } from '@/lib/auth/session';
+import { requireSuperAdmin, setActiveOwnerCookie } from '@/lib/auth/session';
 import { fail, formValue, succeed } from '@/lib/actions/helpers';
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const ROLES: UserRoleType[] = ['OWNER', 'TENANT', 'VENDOR'];
 
-function organizationSlug(name: string): string {
-  const base = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '')
-    .slice(0, 40);
-  return `${base || 'org'}-${randomBytes(3).toString('hex')}`;
-}
+export async function approveUserAction(form: FormData): Promise<void> {
+  await requireSuperAdmin();
+  const userId = formValue(form, 'userId');
+  const role = formValue(form, 'role') as UserRoleType;
 
-export async function createOrganizationAction(form: FormData): Promise<void> {
-  const user = await requireSuperAdmin();
-  const name = formValue(form, 'name');
-  const timezone = formValue(form, 'timezone') || 'UTC';
-  const ownerEmail = formValue(form, 'ownerEmail').toLowerCase();
-
-  let invite: string | undefined;
   try {
-    if (name.length === 0) throw new Error('An organization name is required.');
-    if (ownerEmail && !EMAIL_PATTERN.test(ownerEmail)) {
-      throw new Error('Enter a valid email address for the owner.');
-    }
+    if (!ROLES.includes(role)) throw new Error('Choose a role.');
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new Error('Account not found.');
+    if (user.status !== 'PENDING') throw new Error('This account is not awaiting review.');
 
-    const organization = await prisma.organization.create({
-      data: { name, timezone, slug: organizationSlug(name) },
-    });
-
-    if (ownerEmail) {
-      const { token } = await createInvitation({
-        organizationId: organization.id,
-        email: ownerEmail,
-        kind: 'MANAGER',
-        role: 'OWNER',
-        invitedByUserId: user.id,
-      });
-      invite = invitationPath(token);
-    }
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: { status: 'ACTIVE', requestedRole: null },
+      }),
+      prisma.userRole.upsert({
+        where: { userId_role: { userId, role } },
+        create: { userId, role },
+        update: {},
+      }),
+    ]);
   } catch (error) {
     fail('/admin', error);
   }
 
   revalidatePath('/admin');
-  succeed('/admin', 'Organization created.', { invite });
+  succeed('/admin', 'Account approved.');
+}
+
+export async function rejectUserAction(form: FormData): Promise<void> {
+  await requireSuperAdmin();
+  const userId = formValue(form, 'userId');
+  try {
+    const result = await prisma.user.deleteMany({ where: { id: userId, status: 'PENDING' } });
+    if (result.count === 0) throw new Error('Only pending accounts can be rejected.');
+  } catch (error) {
+    fail('/admin', error);
+  }
+
+  revalidatePath('/admin');
+  succeed('/admin', 'Account request rejected.');
 }
 
 export async function inviteOwnerAction(form: FormData): Promise<void> {
-  const user = await requireSuperAdmin();
-  const organizationId = formValue(form, 'organizationId');
+  const admin = await requireSuperAdmin();
   const email = formValue(form, 'email').toLowerCase();
 
   let invite: string | undefined;
   try {
     if (!EMAIL_PATTERN.test(email)) throw new Error('Enter a valid email address.');
-    const organization = await prisma.organization.findUnique({ where: { id: organizationId } });
-    if (!organization) throw new Error('Organization not found.');
+    const existing = await prisma.user.findUnique({
+      where: { email },
+      include: { roles: true },
+    });
+    if (existing?.roles.some((role) => role.role === 'OWNER')) {
+      throw new Error('That email already owns properties on RentEase.');
+    }
 
     const { token } = await createInvitation({
-      organizationId: organization.id,
       email,
-      kind: 'MANAGER',
       role: 'OWNER',
-      invitedByUserId: user.id,
+      invitedByUserId: admin.id,
     });
     invite = invitationPath(token);
   } catch (error) {
@@ -81,12 +84,14 @@ export async function inviteOwnerAction(form: FormData): Promise<void> {
   succeed('/admin', 'Owner invitation ready. Share the link below.', { invite });
 }
 
-export async function enterOrganizationAction(form: FormData): Promise<void> {
+export async function enterOwnerAction(form: FormData): Promise<void> {
   await requireSuperAdmin();
-  const organizationId = formValue(form, 'organizationId');
-  const organization = await prisma.organization.findUnique({ where: { id: organizationId } });
-  if (!organization) fail('/admin', new Error('Organization not found.'));
+  const ownerUserId = formValue(form, 'ownerUserId');
+  const owner = await prisma.user.findFirst({
+    where: { id: ownerUserId, roles: { some: { role: 'OWNER' } } },
+  });
+  if (!owner) fail('/admin', new Error('Owner not found.'));
 
-  await setActiveOrganizationCookie(organization.id);
+  await setActiveOwnerCookie(owner.id);
   redirect('/dashboard');
 }

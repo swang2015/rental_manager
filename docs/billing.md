@@ -16,7 +16,7 @@ A `RentCharge` is one month of rent for one lease:
 
 ### Generation
 
-`ensureChargesForPeriod(db, organizationId, { year, month })`:
+`ensureChargesForPeriod(db, ownerUserId, { year, month })`:
 
 1. Selects leases with `status = ACTIVE` that overlap the month
    (`startDate <= monthEnd && endDate >= monthStart`).
@@ -32,7 +32,7 @@ GET /api/cron/generate-charges?month=YYYY-MM
 Authorization: Bearer $CRON_SECRET
 ```
 
-The endpoint iterates every organization and uses that organization's scoped client.
+The endpoint iterates every active owner and uses that owner's scoped client.
 
 ## Status
 
@@ -42,14 +42,14 @@ stored column, so it cannot go stale:
 | Status | Rule |
 | --- | --- |
 | `paid` | `balanceCents <= 0` |
-| `overdue` | balance > 0 and the due date is before today **in the organization timezone** |
+| `overdue` | balance > 0 and the due date is before today **in the owner's timezone** |
 | `partial` | balance > 0, not overdue, and some amount has been paid |
 | `unpaid` | balance > 0, not overdue, nothing paid |
 
-`daysLate` is the whole-day difference between today (organization timezone) and the
+`daysLate` is the whole-day difference between today (owner timezone) and the
 due date, and is 0 unless overdue.
 
-Examples (UTC organization):
+Examples (UTC owner):
 
 | Due | Balance | Today | Status |
 | --- | --- | --- | --- |
@@ -65,7 +65,7 @@ The timezone matters: 2026-06-05 23:30 UTC is already 2026-06-06 in
 
 `recordPayment` runs in a transaction:
 
-1. Re-reads the charge inside the organization.
+1. Re-reads the charge inside the owner scope.
 2. Rejects `amount <= 0` and any payment larger than `balanceCents`.
 3. Inserts a `Payment` (date, method `CASH | BANK_TRANSFER | CARD | OTHER`,
    optional reference, recording user).
@@ -93,7 +93,7 @@ edited or deleted from the UI.
 ## Tenant view
 
 `/portal/rent` shows the tenant's own charges and payment history. It is read-only:
-there is no mutation path for tenants. Queries are scoped both by organization and by
+there is no mutation path for tenants. Queries are scoped both by owner and by
 the tenant id from the session.
 
 ## Tests

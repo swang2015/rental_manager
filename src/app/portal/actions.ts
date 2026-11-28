@@ -6,7 +6,7 @@ import { createRequest } from '@/lib/domain/maintenance';
 import { fail, formValue, succeed } from '@/lib/actions/helpers';
 
 export async function submitRequestAction(form: FormData): Promise<void> {
-  const { db, organizationId, tenant, user } = await requireTenant();
+  const { db, ownerUserId, tenant, user } = await requireTenant();
 
   let requestId: string;
   try {
@@ -16,7 +16,7 @@ export async function submitRequestAction(form: FormData): Promise<void> {
     });
     if (!lease) throw new Error('An active lease is required to submit maintenance requests.');
 
-    const request = await createRequest(db, organizationId, {
+    const request = await createRequest(db, ownerUserId, {
       unitId: lease.unitId,
       tenantId: tenant.id,
       category: formValue(form, 'category'),

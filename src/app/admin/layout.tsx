@@ -18,7 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
           <div className="flex items-center gap-4">
             <Link href="/admin" className="text-sm text-slate-700 no-underline hover:underline">
-              Organizations
+              Accounts & owners
             </Link>
             <form action={signOutAction}>
               <SubmitButton className="text-sm text-slate-600 underline">Sign out</SubmitButton>

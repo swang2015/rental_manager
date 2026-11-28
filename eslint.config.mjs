@@ -50,6 +50,8 @@ export default tseslint.config(
       'src/app/onboarding/**',
       // The platform admin console lists and creates organizations globally.
       'src/app/admin/**',
+      // Vendors only read work orders assigned to their own vendor accounts.
+      'src/lib/domain/vendor-portal.ts',
       'src/app/api/cron/**',
       // The health probe only runs `SELECT 1`, it reads no organization data.
       'src/app/api/health/**',

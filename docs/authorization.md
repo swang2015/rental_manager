@@ -1,86 +1,65 @@
 # Authorization
 
-The app has two principals: **managers** and **tenants**. Both are rows in `User`;
-what they can do is derived from their links, not from a separate account type.
-
-## Principals
-
-| Principal | Link | Home |
-| --- | --- | --- |
-| Manager | `Membership(organizationId, userId)` with `status = ACTIVE` and a role | `/dashboard` |
-| Tenant | `Tenant.portalUserId = userId`, `Tenant.status = ACTIVE` | `/portal` |
-
-A user may be a manager in one organization and a tenant in another. If both links
-exist, the manager workspace wins (`homePathForUser`). The first active membership
-is the current organization; a user who belongs to several organizations switches by
-signing out and back in with the desired membership first (multi-organization
-switching is out of scope for this release).
+The platform has one account table (`User`) and four capabilities. A user can hold
+several roles at once.
 
 ## Roles
 
-Roles live in `src/lib/auth/permissions.ts`:
+| Role                   | Stored as                                     | Home         |
+| ---------------------- | --------------------------------------------- | ------------ |
+| Platform administrator | `User.isSuperAdmin = true`                    | `/admin`     |
+| Owner                  | `UserRole(role = OWNER)`                      | `/dashboard` |
+| Tenant                 | `UserRole(role = TENANT)` + a `Tenant` record | `/portal`    |
+| Vendor                 | `UserRole(role = VENDOR)` + a `Vendor` record | `/vendor`    |
 
-| Capability | OWNER | PROPERTY_MANAGER | STAFF |
-| --- | --- | --- | --- |
-| Manage members and invitations | ✅ | — | — |
-| Portfolio: properties, units, tenants, leases | ✅ | ✅ | — |
-| Record payments and adjustments | ✅ | ✅ | — |
-| Maintainance triage, work orders, assignment | ✅ | ✅ | ✅ (assigned work only) |
-| View dashboard, properties, tenants, leases, rent | ✅ | ✅ | ✅ (read-only) |
+An account can be an owner and a tenant and a vendor at the same time. The header of
+each workspace links to the other portals the account can access. `homePathForUser`
+picks the first available surface in this order: superadmin, owner, vendor, tenant,
+then `/onboarding` (pending approval or waiting for an owner invitation).
 
-Enforcement happens twice:
+Owners are platform-level. A property belongs to exactly one owner through
+`Property.ownerUserId`; there is no organization or membership layer.
 
-1. **Layout/pages** call `requireManager()` or `requireManager([...roles])`. A
-   disallowed role is redirected to the dashboard with an error message; a tenant
-   hitting a manager route is redirected to `/portal`.
-2. **Server actions** repeat the same `requireManager` call. Never rely on the UI to
-   hide a control: every mutation re-checks the caller.
+## Ownership isolation
 
-Tenant pages call `requireTenant()`, and all reads are filtered by the tenant id
-from the session — a tenant cannot request another tenant's lease or request by
-guessing an identifier.
-
-## Organization isolation
-
-Every organization-owned table carries `organizationId`. Data access goes through
-`scopedDb(organizationId)` from `src/lib/db/scoped.ts`:
+Every owner-owned table carries `ownerUserId` (properties, units, leases, charges,
+payments, adjustments, maintenance, work orders, tenants, vendors, invitations).
+Data access goes through `scopedDb(ownerUserId)` from `src/lib/db/scoped.ts`:
 
 - `findMany`, `findFirst`, `findFirstOrThrow`, `count`, `aggregate`, `groupBy`,
-  `updateMany`, `deleteMany` get `organizationId` injected into `where`.
-- `create` / `createMany` get `organizationId` injected into `data`.
+  `updateMany`, `deleteMany` get `ownerUserId` injected into `where`.
+- `create` / `createMany` get `ownerUserId` injected into `data`.
 - `findUnique`, `update`, `delete`, and `upsert` **throw**. They cannot be scoped by
   a query hook, so the codebase uses `findFirst`/`updateMany`/`deleteMany` instead.
 
 The bare `@/lib/db` client may only be imported by:
 
 - `src/lib/db.ts` and `src/lib/db/**`,
-- `src/lib/auth/**` (session and invitation resolution happen before an
-  organization is known),
-- `src/app/(auth)/**`, `src/app/onboarding/**`, `src/app/api/cron/**`,
+- `src/lib/auth/**` (session and invitation resolution happen before an owner is
+  known),
+- `src/app/(auth)/**`, `src/app/onboarding/**`, `src/app/admin/**`,
+  `src/app/api/cron/**`,
+- `src/lib/domain/vendor-portal.ts` (queries are filtered by the signed-in vendor's
+  `Vendor.userId`),
 - `prisma/**`.
 
-Anywhere else, `eslint` fails the build:
-
-```text
-'@/lib/db' import is restricted from being used. Use scopedDb(orgId) from
-'@/lib/db/scoped' for organization data.
-```
-
-Example:
-
-```ts
-const { db, organizationId } = await requireManager(['OWNER', 'PROPERTY_MANAGER']);
-
-// Safe: the hook adds organizationId to both the read and the write.
-const lease = await db.lease.findFirst({ where: { id: leaseId } });
-await db.lease.updateMany({
-  where: { id: leaseId, organizationId },
-  data: { status: 'ENDED' },
-});
-```
-
 `tests/isolation.test.ts` proves that a scoped client cannot read, count, update, or
-list records from another organization.
+list records from another owner.
+
+## Guard functions
+
+- `requireManager()` — owner workspace. Owners get `scopedDb(user.id)`. A superadmin
+  gets the owner selected by the `rm_owner` cookie (set from `/admin`) or the first
+  owner in the system.
+- `requireTenant()` — tenant portal. Uses the first active `Tenant` record of the
+  signed-in user and scopes the client to that owner.
+- `requireVendor()` — vendor portal. Returns all `Vendor` records of the signed-in
+  user; work-order queries are filtered by those vendor ids.
+- `requireSuperAdmin()` — platform console. Owners, tenants, and vendors are
+  redirected to their own home.
+
+Every page layout and every server action calls the appropriate guard. A mutation
+never relies on the UI hiding a control.
 
 ## Sessions
 
@@ -90,15 +69,17 @@ Sessions are database-backed and custom (no Auth.js):
   `Session.tokenHash`; the raw token goes into the `rm_session` cookie.
 - The cookie is `HttpOnly`, `SameSite=Lax`, `Path=/`, valid for 30 days, and marked
   `Secure` when `SESSION_COOKIE_SECURE=true`.
-- `getSessionUser()` returns the user with active memberships and tenant records, or
-  deletes the row when expired.
-- Sign-out deletes the session row and the cookie, so a copied cookie stops working.
+- `getSessionUser()` returns the user with roles, tenant records, and vendor records.
+  Disabled accounts and expired sessions get no user.
+- Sign-out deletes the session row, the cookie, and the superadmin's `rm_owner`
+  selection.
+- Pending accounts can sign in but only reach `/onboarding` until approved.
 - Passwords are hashed with Argon2id (`@noble/hashes`, pure JavaScript, so it runs
   on Cloudflare Workers) and stored as PHC-encoded strings.
 - Failed sign-ins are rate limited per email: 5 failures per 15 minutes.
 
 ## Tests
 
-- `tests/permissions.test.ts` — role capability map.
 - `tests/isolation.test.ts` — scopedDb filters and refuses unsafe operations.
 - `tests/rate-limit.test.ts` — login throttling.
+- `e2e/auth.spec.ts` — owner, tenant, vendor, superadmin, approval, invitations.

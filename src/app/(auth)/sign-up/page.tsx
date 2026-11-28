@@ -7,6 +7,29 @@ import { getSessionUser, homePathForUser } from '@/lib/auth/session';
 import { searchParam } from '@/lib/actions/helpers';
 import { prisma } from '@/lib/db';
 
+const TIMEZONES = [
+  'Asia/Shanghai',
+  'Asia/Singapore',
+  'Europe/London',
+  'America/New_York',
+  'America/Los_Angeles',
+  'UTC',
+] as const;
+
+function TimezoneField() {
+  return (
+    <Field label="Timezone" hint="Used to decide when rent is overdue.">
+      <select name="timezone" defaultValue="Asia/Shanghai" className={inputClass}>
+        {TIMEZONES.map((timezone) => (
+          <option key={timezone} value={timezone}>
+            {timezone}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
 export default async function SignUpPage({
   searchParams,
 }: {
@@ -18,28 +41,17 @@ export default async function SignUpPage({
   const params = await searchParams;
   const error = searchParam(params, 'error');
   const userCount = await prisma.user.count();
-
-  if (userCount > 0) {
-    return (
-      <>
-        <h1 className="mb-1 text-xl font-semibold">Registration is closed</h1>
-        <p className="mb-4 text-sm text-slate-600">
-          This installation already has an administrator. Ask them to send you an invitation link,
-          or sign in if you already have an account.
-        </p>
-        <Link href="/sign-in" className={`${buttonClass} block text-center`}>
-          Go to sign in
-        </Link>
-      </>
-    );
-  }
+  const isFirstAccount = userCount === 0;
 
   return (
     <>
-      <h1 className="mb-1 text-xl font-semibold">Create the administrator account</h1>
+      <h1 className="mb-1 text-xl font-semibold">
+        {isFirstAccount ? 'Create the administrator account' : 'Request an account'}
+      </h1>
       <p className="mb-4 text-sm text-slate-600">
-        This is the first account for this installation, so it becomes the platform administrator.
-        You can create organizations and invite people after signing in.
+        {isFirstAccount
+          ? 'This is the first account for this installation, so it becomes the platform administrator.'
+          : 'Tell us how you use RentEase. A platform administrator reviews new accounts before they can sign in.'}
       </p>
       <Alert error={error} />
       <form action={signUpAction} className="space-y-4">
@@ -58,8 +70,27 @@ export default async function SignUpPage({
             className={inputClass}
           />
         </Field>
-        <SubmitButton className={`${buttonClass} w-full`} pendingLabel="Creating…">
-          Create administrator account
+
+        {isFirstAccount ? (
+          <TimezoneField />
+        ) : (
+          <>
+            <Field label="I am a">
+              <select name="requestedRole" defaultValue="OWNER" className={inputClass}>
+                <option value="OWNER">Property owner</option>
+                <option value="TENANT">Tenant</option>
+                <option value="VENDOR">Vendor / contractor</option>
+              </select>
+            </Field>
+            <Field label="Phone (optional)">
+              <input name="phone" autoComplete="tel" className={inputClass} />
+            </Field>
+            <TimezoneField />
+          </>
+        )}
+
+        <SubmitButton className={`${buttonClass} w-full`} pendingLabel="Submitting…">
+          {isFirstAccount ? 'Create administrator account' : 'Request access'}
         </SubmitButton>
       </form>
       <p className="mt-4 text-sm text-slate-600">

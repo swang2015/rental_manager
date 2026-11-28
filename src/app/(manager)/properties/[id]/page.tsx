@@ -42,7 +42,7 @@ export default async function PropertyDetailPage({
   const property = await getProperty(context.db, id);
   if (!property) notFound();
 
-  const canManage = context.membership.role !== 'STAFF';
+  const canManage = true;
 
   return (
     <>
@@ -65,7 +65,12 @@ export default async function PropertyDetailPage({
               <input name="name" defaultValue={property.name} required className={inputClass} />
             </Field>
             <Field label="Street address">
-              <input name="addressLine1" defaultValue={property.addressLine1} required className={inputClass} />
+              <input
+                name="addressLine1"
+                defaultValue={property.addressLine1}
+                required
+                className={inputClass}
+              />
             </Field>
             <Field label="City">
               <input name="city" defaultValue={property.city} required className={inputClass} />
@@ -74,10 +79,20 @@ export default async function PropertyDetailPage({
               <input name="region" defaultValue={property.region} required className={inputClass} />
             </Field>
             <Field label="Postal code">
-              <input name="postalCode" defaultValue={property.postalCode} required className={inputClass} />
+              <input
+                name="postalCode"
+                defaultValue={property.postalCode}
+                required
+                className={inputClass}
+              />
             </Field>
             <Field label="Notes" className="sm:col-span-2">
-              <textarea name="notes" rows={2} defaultValue={property.notes ?? ''} className={inputClass} />
+              <textarea
+                name="notes"
+                rows={2}
+                defaultValue={property.notes ?? ''}
+                className={inputClass}
+              />
             </Field>
             <div className="flex flex-wrap gap-3 sm:col-span-2">
               <SubmitButton className={buttonClass} pendingLabel="Saving…">
@@ -210,7 +225,14 @@ export default async function PropertyDetailPage({
               <input name="label" required placeholder="2B" className={inputClass} />
             </Field>
             <Field label="Bedrooms">
-              <input name="bedrooms" type="number" min="0" defaultValue={1} required className={inputClass} />
+              <input
+                name="bedrooms"
+                type="number"
+                min="0"
+                defaultValue={1}
+                required
+                className={inputClass}
+              />
             </Field>
             <Field label="Bathrooms">
               <input
@@ -236,7 +258,8 @@ export default async function PropertyDetailPage({
       ) : null}
 
       <p className="mt-6 text-sm text-slate-500">
-        Looking for lease history? Open a <TextLink href="/leases">lease</TextLink> or a tenant record.
+        Looking for lease history? Open a <TextLink href="/leases">lease</TextLink> or a tenant
+        record.
       </p>
     </>
   );

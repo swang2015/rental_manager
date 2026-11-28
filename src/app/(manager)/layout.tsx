@@ -1,7 +1,5 @@
 import Link from 'next/link';
-import { requireManager } from '@/lib/auth/session';
-import { canManageMembers } from '@/lib/auth/permissions';
-import { ROLE_LABEL } from '@/lib/labels';
+import { hasRole, requireManager } from '@/lib/auth/session';
 import { signOutAction } from '../session-actions';
 import { SubmitButton } from '@/components/submit-button';
 
@@ -12,21 +10,21 @@ const NAV = [
   { href: '/leases', label: 'Leases' },
   { href: '/rent', label: 'Rent' },
   { href: '/maintenance', label: 'Maintenance' },
+  { href: '/vendors', label: 'Vendors' },
 ];
 
 export default async function ManagerLayout({ children }: { children: React.ReactNode }) {
   const context = await requireManager();
-  const role = context.membership.role;
+  const user = context.user;
 
   return (
     <div className="min-h-screen">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div>
-            <p className="text-sm font-semibold">{context.organization.name}</p>
+            <p className="text-sm font-semibold">{context.owner.name}</p>
             <p className="text-xs text-slate-500">
-              {context.user.name} ·{' '}
-              {context.isSuperAdmin ? 'Superadmin' : (ROLE_LABEL[role] ?? role)}
+              {user.name} · {context.isSuperAdmin ? 'Superadmin' : 'Owner'}
             </p>
           </div>
           <form action={signOutAction}>
@@ -43,12 +41,20 @@ export default async function ManagerLayout({ children }: { children: React.Reac
               {item.label}
             </Link>
           ))}
-          {canManageMembers(role) ? (
+          {hasRole(user, 'TENANT') && user.tenancies.length > 0 ? (
             <Link
-              href="/members"
-              className="rounded-md px-3 py-1.5 text-sm text-slate-700 no-underline hover:bg-slate-100"
+              href="/portal"
+              className="rounded-md px-3 py-1.5 text-sm text-emerald-800 no-underline hover:bg-emerald-50"
             >
-              Members
+              Tenant portal
+            </Link>
+          ) : null}
+          {hasRole(user, 'VENDOR') && user.vendors.length > 0 ? (
+            <Link
+              href="/vendor"
+              className="rounded-md px-3 py-1.5 text-sm text-amber-800 no-underline hover:bg-amber-50"
+            >
+              Vendor portal
             </Link>
           ) : null}
           {context.isSuperAdmin ? (
@@ -56,7 +62,7 @@ export default async function ManagerLayout({ children }: { children: React.Reac
               href="/admin"
               className="rounded-md px-3 py-1.5 text-sm text-sky-800 no-underline hover:bg-sky-50"
             >
-              All organizations
+              Platform admin
             </Link>
           ) : null}
         </nav>

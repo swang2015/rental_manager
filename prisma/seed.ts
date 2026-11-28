@@ -15,84 +15,123 @@ function monthStart(offsetMonths: number, now = new Date()): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offsetMonths, 1));
 }
 
-function monthEnd(offsetMonths: number, now = new Date()): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offsetMonths + 1, 0));
+function dueDate(periodStart: Date, day: number): Date {
+  return new Date(Date.UTC(periodStart.getUTCFullYear(), periodStart.getUTCMonth(), day));
 }
 
 async function main() {
   const passwordHash = await hashPassword(PASSWORD);
 
-  const sunrise = await prisma.organization.upsert({
-    where: { slug: 'sunrise-rentals' },
-    update: {},
-    create: { name: 'Sunrise Rentals', slug: 'sunrise-rentals', timezone: 'Asia/Shanghai' },
-  });
-  const harbor = await prisma.organization.upsert({
-    where: { slug: 'harbor-homes' },
-    update: {},
-    create: { name: 'Harbor Homes', slug: 'harbor-homes', timezone: 'America/New_York' },
-  });
-
-  async function user(email: string, name: string) {
-    return prisma.user.upsert({
-      where: { email },
-      update: {},
-      create: { email, name, passwordHash },
+  async function user(input: {
+    email: string;
+    name: string;
+    role?: 'OWNER' | 'TENANT' | 'VENDOR';
+    isSuperAdmin?: boolean;
+    timezone?: string;
+    phone?: string | null;
+  }) {
+    const record = await prisma.user.upsert({
+      where: { email: input.email },
+      update: { isSuperAdmin: input.isSuperAdmin ?? false, status: 'ACTIVE' },
+      create: {
+        email: input.email,
+        name: input.name,
+        passwordHash,
+        isSuperAdmin: input.isSuperAdmin ?? false,
+        status: 'ACTIVE',
+        timezone: input.timezone ?? 'UTC',
+        phone: input.phone ?? null,
+      },
     });
+
+    if (input.role) {
+      await prisma.userRole.upsert({
+        where: { userId_role: { userId: record.id, role: input.role } },
+        update: {},
+        create: { userId: record.id, role: input.role },
+      });
+    }
+    return record;
   }
 
-  async function membership(
-    organizationId: string,
-    userId: string,
-    role: 'OWNER' | 'PROPERTY_MANAGER' | 'STAFF',
-  ) {
-    return prisma.membership.upsert({
-      where: { organizationId_userId: { organizationId, userId } },
-      update: {},
-      create: { organizationId, userId, role, status: 'ACTIVE' },
-    });
-  }
+  await user({
+    email: 'admin@rental.test',
+    name: 'Avery Admin',
+    isSuperAdmin: true,
+    timezone: 'Asia/Shanghai',
+  });
 
-  await prisma.user.upsert({
-    where: { email: 'admin@rental.test' },
-    update: { isSuperAdmin: true },
+  const owner = await user({
+    email: 'owner@rental.test',
+    name: 'Olivia Owner',
+    role: 'OWNER',
+    timezone: 'Asia/Shanghai',
+    phone: '+86 138 0000 0001',
+  });
+  const tenantUser = await user({
+    email: 'tenant@rental.test',
+    name: 'Alice Chen',
+    role: 'TENANT',
+    timezone: 'Asia/Shanghai',
+    phone: '+86 138 0000 0002',
+  });
+  const vendorUser = await user({
+    email: 'vendor@rental.test',
+    name: 'Vic Vendor',
+    role: 'VENDOR',
+    timezone: 'Asia/Shanghai',
+    phone: '+86 138 0000 0003',
+  });
+
+  const tenant = await prisma.tenant.upsert({
+    where: { ownerUserId_userId: { ownerUserId: owner.id, userId: tenantUser.id } },
+    update: { status: 'ACTIVE' },
     create: {
-      email: 'admin@rental.test',
-      name: 'Avery Admin',
-      passwordHash,
-      isSuperAdmin: true,
+      ownerUserId: owner.id,
+      userId: tenantUser.id,
+      name: tenantUser.name,
+      email: tenantUser.email,
+      phone: tenantUser.phone,
     },
   });
 
-  const sunriseOwner = await user('owner@sunrise.test', 'Olivia Owner');
-  const sunriseManager = await user('manager@sunrise.test', 'Marco Manager');
-  const sunriseStaff = await user('staff@sunrise.test', 'Sam Staff');
-  const aliceUser = await user('tenant@sunrise.test', 'Alice Chen');
-  const harborOwner = await user('owner@harbor.test', 'Hana Owner');
-  const carlaUser = await user('tenant@harbor.test', 'Carla Diaz');
-
-  await membership(sunrise.id, sunriseOwner.id, 'OWNER');
-  await membership(sunrise.id, sunriseManager.id, 'PROPERTY_MANAGER');
-  const staffMembership = await membership(sunrise.id, sunriseStaff.id, 'STAFF');
-  await membership(harbor.id, harborOwner.id, 'OWNER');
+  const vendor = await prisma.vendor.upsert({
+    where: { ownerUserId_userId: { ownerUserId: owner.id, userId: vendorUser.id } },
+    update: { status: 'ACTIVE' },
+    create: {
+      ownerUserId: owner.id,
+      userId: vendorUser.id,
+      name: vendorUser.name,
+      company: 'Vic Plumbing Co.',
+      trade: 'Plumbing',
+      phone: vendorUser.phone,
+    },
+  });
 
   async function property(
-    organizationId: string,
     name: string,
     addressLine1: string,
     city: string,
     region: string,
     postalCode: string,
   ) {
-    const existing = await prisma.property.findFirst({ where: { organizationId, name } });
+    const existing = await prisma.property.findFirst({ where: { ownerUserId: owner.id, name } });
     if (existing) return existing;
     return prisma.property.create({
-      data: { organizationId, name, addressLine1, city, region, postalCode },
+      data: { ownerUserId: owner.id, name, addressLine1, city, region, postalCode },
     });
   }
 
+  const maple = await property('Maple Court', '12 Maple Street', 'Shanghai', 'Shanghai', '200031');
+  const harbor = await property(
+    'Harbor View',
+    '88 Riverside Road',
+    'Shanghai',
+    'Shanghai',
+    '200040',
+  );
+
   async function unit(
-    organizationId: string,
     propertyId: string,
     label: string,
     bedrooms: number,
@@ -103,253 +142,146 @@ async function main() {
     return prisma.unit.upsert({
       where: { propertyId_label: { propertyId, label } },
       update: {},
-      create: { organizationId, propertyId, label, bedrooms, bathrooms, rentAmountCents, status },
-    });
-  }
-
-  async function tenant(
-    organizationId: string,
-    name: string,
-    email: string,
-    phone: string | null,
-    portalUserId: string | null,
-  ) {
-    return prisma.tenant.upsert({
-      where: { organizationId_email: { organizationId, email } },
-      update: {},
-      create: { organizationId, name, email, phone, portalUserId },
-    });
-  }
-
-  async function lease(input: {
-    organizationId: string;
-    unitId: string;
-    tenantId: string;
-    startDate: Date;
-    endDate: Date;
-    rentAmountCents: number;
-    depositAmountCents: number;
-    dueDay: number;
-    status: 'DRAFT' | 'ACTIVE' | 'ENDED';
-    terminationReason?: string;
-  }) {
-    const existing = await prisma.lease.findFirst({
-      where: {
-        organizationId: input.organizationId,
-        unitId: input.unitId,
-        startDate: input.startDate,
+      create: {
+        ownerUserId: owner.id,
+        propertyId,
+        label,
+        bedrooms,
+        bathrooms,
+        rentAmountCents,
+        status,
       },
     });
-    if (existing) return existing;
-    return prisma.lease.create({ data: input });
   }
 
-  async function charge(
-    leaseId: string,
-    organizationId: string,
-    periodStart: Date,
-    amountCents: number,
-    balanceCents: number,
-    dueDay: number,
-  ) {
-    const dueDate = new Date(
-      Date.UTC(periodStart.getUTCFullYear(), periodStart.getUTCMonth(), dueDay),
-    );
+  const unitA = await unit(maple.id, '1A', 2, 1, 320_000, 'OCCUPIED');
+  await unit(maple.id, '1B', 1, 1, 240_000, 'AVAILABLE');
+  await unit(harbor.id, '5C', 3, 2, 480_000, 'AVAILABLE');
+
+  const leaseStart = monthStart(-3);
+  const leaseEnd = monthStart(9);
+
+  const existingLease = await prisma.lease.findFirst({
+    where: { ownerUserId: owner.id, unitId: unitA.id, startDate: leaseStart },
+  });
+  const lease =
+    existingLease ??
+    (await prisma.lease.create({
+      data: {
+        ownerUserId: owner.id,
+        unitId: unitA.id,
+        tenantId: tenant.id,
+        startDate: leaseStart,
+        endDate: leaseEnd,
+        rentAmountCents: 320_000,
+        depositAmountCents: 320_000,
+        dueDay: 5,
+        status: 'ACTIVE',
+      },
+    }));
+
+  async function charge(periodStart: Date, balanceCents: number, amountCents = 320_000) {
     return prisma.rentCharge.upsert({
-      where: { leaseId_periodStart: { leaseId, periodStart } },
+      where: { leaseId_periodStart: { leaseId: lease.id, periodStart } },
       update: {},
-      create: { organizationId, leaseId, periodStart, dueDate, amountCents, balanceCents },
+      create: {
+        ownerUserId: owner.id,
+        leaseId: lease.id,
+        periodStart,
+        dueDate: dueDate(periodStart, 5),
+        amountCents,
+        balanceCents,
+      },
     });
   }
 
-  async function payment(
-    chargeId: string,
-    organizationId: string,
-    amountCents: number,
-    paidOn: Date,
-    recordedByUserId: string,
-    reference: string,
-  ) {
-    const existing = await prisma.payment.findFirst({ where: { chargeId, amountCents, paidOn } });
-    if (existing) return existing;
-    return prisma.payment.create({
+  const paidCharge = await charge(monthStart(-3), 0);
+  const overdueCharge = await charge(monthStart(-1), 320_000);
+  const partialCharge = await charge(monthStart(0), 160_000);
+
+  async function payment(chargeId: string, amountCents: number, paidOn: Date, reference: string) {
+    const existing = await prisma.payment.findFirst({ where: { chargeId, reference } });
+    if (existing) return;
+    await prisma.payment.create({
       data: {
-        organizationId,
+        ownerUserId: owner.id,
         chargeId,
         amountCents,
         paidOn,
         method: 'BANK_TRANSFER',
         reference,
-        recordedByUserId,
+        recordedByUserId: owner.id,
       },
     });
   }
 
-  const maple = await property(
-    sunrise.id,
-    'Maple Court',
-    '12 Maple Street',
-    'Shanghai',
-    'Shanghai',
-    '200031',
-  );
-  const harborView = await property(
-    harbor.id,
-    'Harbor View',
-    '88 Bay Road',
-    'Boston',
-    'MA',
-    '02110',
-  );
+  await payment(paidCharge.id, 320_000, monthStart(-3), 'SEED-PAID');
+  await payment(partialCharge.id, 160_000, new Date(), 'SEED-PARTIAL');
 
-  const unit1A = await unit(sunrise.id, maple.id, '1A', 2, 1, 420_000, 'OCCUPIED');
-  await unit(sunrise.id, maple.id, '1B', 1, 1, 320_000, 'AVAILABLE');
-  const unit2A = await unit(sunrise.id, maple.id, '2A', 3, 2, 560_000, 'AVAILABLE');
-  const unit5 = await unit(harbor.id, harborView.id, '5', 2, 1, 245_000, 'OCCUPIED');
-  await unit(harbor.id, harborView.id, '6', 2, 2, 275_000, 'AVAILABLE');
-
-  const alice = await tenant(
-    sunrise.id,
-    'Alice Chen',
-    'tenant@sunrise.test',
-    '+86 138 0000 0001',
-    aliceUser.id,
-  );
-  const ben = await tenant(sunrise.id, 'Ben Ortiz', 'ben@example.test', '+86 138 0000 0002', null);
-  const carla = await tenant(
-    harbor.id,
-    'Carla Diaz',
-    'tenant@harbor.test',
-    '+1 617 555 0100',
-    carlaUser.id,
-  );
-
-  const activeLease = await lease({
-    organizationId: sunrise.id,
-    unitId: unit1A.id,
-    tenantId: alice.id,
-    startDate: monthStart(-6),
-    endDate: monthEnd(6),
-    rentAmountCents: 420_000,
-    depositAmountCents: 840_000,
-    dueDay: 5,
-    status: 'ACTIVE',
+  let request = await prisma.maintenanceRequest.findFirst({
+    where: { ownerUserId: owner.id, unitId: unitA.id, category: 'Plumbing' },
   });
-
-  const endedLease = await lease({
-    organizationId: sunrise.id,
-    unitId: unit2A.id,
-    tenantId: ben.id,
-    startDate: monthStart(-18),
-    endDate: monthEnd(-8),
-    rentAmountCents: 560_000,
-    depositAmountCents: 560_000,
-    dueDay: 3,
-    status: 'ENDED',
-    terminationReason: 'Tenant moved out',
-  });
-
-  const harborLease = await lease({
-    organizationId: harbor.id,
-    unitId: unit5.id,
-    tenantId: carla.id,
-    startDate: monthStart(-3),
-    endDate: monthEnd(9),
-    rentAmountCents: 245_000,
-    depositAmountCents: 245_000,
-    dueDay: 1,
-    status: 'ACTIVE',
-  });
-
-  const overdueCharge = await charge(
-    activeLease.id,
-    sunrise.id,
-    monthStart(-2),
-    420_000,
-    420_000,
-    5,
-  );
-  const paidCharge = await charge(activeLease.id, sunrise.id, monthStart(-1), 420_000, 0, 5);
-  const partialCharge = await charge(
-    activeLease.id,
-    sunrise.id,
-    monthStart(0),
-    420_000,
-    320_000,
-    5,
-  );
-  await charge(harborLease.id, harbor.id, monthStart(0), 245_000, 245_000, 1);
-
-  await payment(paidCharge.id, sunrise.id, 420_000, monthStart(-1), sunriseManager.id, 'SEPA-1001');
-  await payment(
-    partialCharge.id,
-    sunrise.id,
-    100_000,
-    monthStart(0),
-    sunriseManager.id,
-    'SEPA-1002',
-  );
-
-  const existingRequest = await prisma.maintenanceRequest.findFirst({
-    where: { organizationId: sunrise.id, description: { contains: 'kitchen tap' } },
-  });
-  if (!existingRequest) {
-    const request = await prisma.maintenanceRequest.create({
+  if (!request) {
+    request = await prisma.maintenanceRequest.create({
       data: {
-        organizationId: sunrise.id,
-        unitId: unit1A.id,
-        tenantId: alice.id,
-        createdByUserId: aliceUser.id,
+        ownerUserId: owner.id,
+        unitId: unitA.id,
+        tenantId: tenant.id,
         category: 'Plumbing',
-        description: 'The kitchen tap keeps dripping and the sink drains slowly.',
-        priority: 'URGENT',
+        description: 'Kitchen sink drains slowly and the tap drips overnight.',
+        priority: 'MEDIUM',
         status: 'IN_PROGRESS',
-        triageNote: 'Likely a worn cartridge; check the trap too.',
-      },
-    });
-    const workOrder = await prisma.workOrder.create({
-      data: {
-        organizationId: sunrise.id,
-        requestId: request.id,
-        assigneeMembershipId: staffMembership.id,
-        scheduledFor: new Date(),
-        status: 'IN_PROGRESS',
+        triageNote: 'Tenant available after 6pm.',
+        createdByUserId: tenantUser.id,
       },
     });
     await prisma.requestEvent.create({
       data: {
-        organizationId: sunrise.id,
+        ownerUserId: owner.id,
         requestId: request.id,
         fromStatus: null,
-        toStatus: 'OPEN',
-        note: 'Request submitted',
-        actorUserId: aliceUser.id,
+        toStatus: 'IN_PROGRESS',
+        note: 'Work order assigned to Vic Plumbing Co.',
+        actorUserId: owner.id,
+      },
+    });
+  }
+
+  const existingOrder = await prisma.workOrder.findUnique({ where: { requestId: request.id } });
+  if (!existingOrder) {
+    const workOrder = await prisma.workOrder.create({
+      data: {
+        ownerUserId: owner.id,
+        requestId: request.id,
+        vendorId: vendor.id,
+        scheduledFor: monthStart(0),
+        status: 'SCHEDULED',
       },
     });
     await prisma.workOrderEvent.create({
       data: {
-        organizationId: sunrise.id,
+        ownerUserId: owner.id,
         workOrderId: workOrder.id,
         fromStatus: null,
         toStatus: 'SCHEDULED',
         note: 'Work order created and assigned',
-        actorUserId: sunriseManager.id,
+        actorUserId: owner.id,
       },
     });
   }
 
   console.log('Seed complete');
   console.log(`Users: password "${PASSWORD}"`);
-  console.log('  admin@rental.test (platform administrator)');
+  console.log('  admin@rental.test   (platform administrator)');
+  console.log('  owner@rental.test   (owner, Maple Court + Harbor View)');
+  console.log('  tenant@rental.test  (tenant, 1A)');
+  console.log('  vendor@rental.test  (vendor, Vic Plumbing Co.)');
+  console.log(`Owner: ${owner.email}`);
+  console.log(`Lease: ${lease.id}`);
   console.log(
-    '  owner@sunrise.test / manager@sunrise.test / staff@sunrise.test / tenant@sunrise.test',
+    `Charges: paid=${paidCharge.id}, overdue=${overdueCharge.id}, partial=${partialCharge.id}`,
   );
-  console.log('  owner@harbor.test / tenant@harbor.test');
-  console.log(`Organizations: ${sunrise.name}, ${harbor.name}`);
-  console.log(`Leases: active=${activeLease.id}, ended=${endedLease.id}, harbor=${harborLease.id}`);
-  console.log(
-    `Charges: overdue=${overdueCharge.id}, paid=${paidCharge.id}, partial=${partialCharge.id}`,
-  );
+  if (request) console.log(`Maintenance request: ${request.id}`);
 }
 
 main()

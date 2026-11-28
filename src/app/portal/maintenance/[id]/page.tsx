@@ -66,22 +66,26 @@ export default async function PortalRequestPage({
           </div>
           <div>
             <dt className="text-slate-500">Scheduled</dt>
-            <dd>{request.workOrder?.scheduledFor?.toISOString().slice(0, 10) ?? 'Not scheduled yet'}</dd>
+            <dd>
+              {request.workOrder?.scheduledFor?.toISOString().slice(0, 10) ?? 'Not scheduled yet'}
+            </dd>
           </div>
           <div>
             <dt className="text-slate-500">Assigned to</dt>
             <dd>
-              {request.workOrder?.assignee
-                ? `${request.workOrder.assignee.user.name} (${request.workOrder.assignee.role
-                    .replace('_', ' ')
-                    .toLowerCase()})`
+              {request.workOrder?.vendor
+                ? `${request.workOrder.vendor.name}${
+                    request.workOrder.vendor.company ? ` (${request.workOrder.vendor.company})` : ''
+                  }`
                 : 'Not assigned yet'}
             </dd>
           </div>
           {request.workOrder ? (
             <div>
               <dt className="text-slate-500">Work order</dt>
-              <dd>{WORK_ORDER_STATUS_LABEL[request.workOrder.status] ?? request.workOrder.status}</dd>
+              <dd>
+                {WORK_ORDER_STATUS_LABEL[request.workOrder.status] ?? request.workOrder.status}
+              </dd>
             </div>
           ) : null}
           {request.workOrder?.resolutionNote ? (

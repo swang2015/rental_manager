@@ -25,12 +25,7 @@ import {
   secondaryButtonClass,
 } from '@/components/ui';
 import { SubmitButton } from '@/components/submit-button';
-import {
-  LEASE_STATUS_LABEL,
-  centsToInput,
-  dateToInput,
-  leaseStatusTone,
-} from '@/lib/labels';
+import { LEASE_STATUS_LABEL, centsToInput, dateToInput, leaseStatusTone } from '@/lib/labels';
 
 function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 86_400_000);
@@ -49,10 +44,14 @@ export default async function LeaseDetailPage({
   const lease = await getLease(context.db, id);
   if (!lease) notFound();
 
-  const canManage = context.membership.role !== 'STAFF';
+  const canManage = true;
   const renewalStart = addDays(lease.endDate, 1);
   const renewalEnd = new Date(
-    Date.UTC(renewalStart.getUTCFullYear() + 1, renewalStart.getUTCMonth(), renewalStart.getUTCDate()),
+    Date.UTC(
+      renewalStart.getUTCFullYear() + 1,
+      renewalStart.getUTCMonth(),
+      renewalStart.getUTCDate(),
+    ),
   );
 
   return (
@@ -163,10 +162,22 @@ export default async function LeaseDetailPage({
               />
             </Field>
             <Field label="Rent due day" hint="1–28">
-              <input name="dueDay" type="number" min="1" max="28" defaultValue={lease.dueDay} className={inputClass} />
+              <input
+                name="dueDay"
+                type="number"
+                min="1"
+                max="28"
+                defaultValue={lease.dueDay}
+                className={inputClass}
+              />
             </Field>
             <Field label="Monthly rent">
-              <input name="rentAmount" defaultValue={centsToInput(lease.rentAmountCents)} required className={inputClass} />
+              <input
+                name="rentAmount"
+                defaultValue={centsToInput(lease.rentAmountCents)}
+                required
+                className={inputClass}
+              />
             </Field>
             <Field label="Security deposit">
               <input
@@ -197,10 +208,21 @@ export default async function LeaseDetailPage({
                 />
               </Field>
               <Field label="Monthly rent" hint="Applies to future charges only.">
-                <input name="rentAmount" defaultValue={centsToInput(lease.rentAmountCents)} className={inputClass} />
+                <input
+                  name="rentAmount"
+                  defaultValue={centsToInput(lease.rentAmountCents)}
+                  className={inputClass}
+                />
               </Field>
               <Field label="Rent due day" hint="1–28">
-                <input name="dueDay" type="number" min="1" max="28" defaultValue={lease.dueDay} className={inputClass} />
+                <input
+                  name="dueDay"
+                  type="number"
+                  min="1"
+                  max="28"
+                  defaultValue={lease.dueDay}
+                  className={inputClass}
+                />
               </Field>
               <div className="flex items-end">
                 <SubmitButton className={secondaryButtonClass}>Save changes</SubmitButton>
@@ -232,7 +254,12 @@ export default async function LeaseDetailPage({
                 />
               </Field>
               <Field label="Monthly rent">
-                <input name="rentAmount" defaultValue={centsToInput(lease.rentAmountCents)} required className={inputClass} />
+                <input
+                  name="rentAmount"
+                  defaultValue={centsToInput(lease.rentAmountCents)}
+                  required
+                  className={inputClass}
+                />
               </Field>
               <Field label="Security deposit">
                 <input
@@ -243,7 +270,14 @@ export default async function LeaseDetailPage({
                 />
               </Field>
               <Field label="Rent due day">
-                <input name="dueDay" type="number" min="1" max="28" defaultValue={lease.dueDay} className={inputClass} />
+                <input
+                  name="dueDay"
+                  type="number"
+                  min="1"
+                  max="28"
+                  defaultValue={lease.dueDay}
+                  className={inputClass}
+                />
               </Field>
               <div className="flex items-end">
                 <SubmitButton className={secondaryButtonClass} pendingLabel="Creating…">

@@ -8,8 +8,7 @@ import {
 } from '@/lib/domain/billing';
 import {
   createLease,
-  createMembership,
-  createOrganization,
+  createOwner,
   createProperty,
   createTenant,
   createUnit,
@@ -18,19 +17,18 @@ import {
 } from './helpers';
 
 async function fixture() {
-  const org = await createOrganization('Billing Org');
+  const org = await createOwner('Billing Org');
   const property = await createProperty(org.id);
   const unit = await createUnit(org.id, property.id, '1A', 100_000);
   const tenant = await createTenant(org.id);
   const lease = await createLease({
-    organizationId: org.id,
+    ownerUserId: org.id,
     unitId: unit.id,
     tenantId: tenant.id,
     rentAmountCents: 100_000,
     dueDay: 5,
   });
   const user = await createUser('manager@billing.test');
-  await createMembership(org.id, user.id, 'OWNER');
   return { org, property, unit, tenant, lease, user, db: scopedDb(org.id) };
 }
 
@@ -58,7 +56,7 @@ describe('rent billing', () => {
   it('does not generate charges for ended leases', async () => {
     const { org, property, tenant, db } = await fixture();
     const endedLease = await createLease({
-      organizationId: org.id,
+      ownerUserId: org.id,
       unitId: (await createUnit(org.id, property.id, '2B')).id,
       tenantId: tenant.id,
       status: 'ENDED',

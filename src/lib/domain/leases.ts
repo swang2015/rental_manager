@@ -14,8 +14,14 @@ export type LeaseTermsInput = {
 };
 
 function validateTerms(input: Omit<LeaseTermsInput, 'unitId' | 'tenantId'>) {
-  assertCondition(input.endDate.getTime() > input.startDate.getTime(), 'The end date must be after the start date.');
-  assertCondition(input.dueDay >= 1 && input.dueDay <= 28, 'Rent due day must be between 1 and 28.');
+  assertCondition(
+    input.endDate.getTime() > input.startDate.getTime(),
+    'The end date must be after the start date.',
+  );
+  assertCondition(
+    input.dueDay >= 1 && input.dueDay <= 28,
+    'Rent due day must be between 1 and 28.',
+  );
   assertCondition(input.rentAmountCents > 0, 'Monthly rent must be greater than zero.');
   assertCondition(input.depositAmountCents >= 0, 'Deposit cannot be negative.');
 }
@@ -61,27 +67,35 @@ export async function getLease(db: ScopedDb, leaseId: string) {
   });
 }
 
-export async function createDraftLease(db: ScopedDb, organizationId: string, input: LeaseTermsInput) {
+export async function createDraftLease(db: ScopedDb, ownerUserId: string, input: LeaseTermsInput) {
   validateTerms(input);
   const unit = assertFound(
     await db.unit.findFirst({ where: { id: input.unitId }, include: { property: true } }),
     'Unit not found.',
   );
   assertCondition(unit.archivedAt === null, 'Cannot lease an archived unit.', 'invalid_state');
-  assertCondition(unit.status === 'AVAILABLE', 'Only an available unit can be leased.', 'invalid_state');
+  assertCondition(
+    unit.status === 'AVAILABLE',
+    'Only an available unit can be leased.',
+    'invalid_state',
+  );
 
   const tenant = assertFound(
     await db.tenant.findFirst({ where: { id: input.tenantId } }),
     'Tenant not found.',
   );
-  assertCondition(tenant.status === 'ACTIVE', 'Cannot lease to an archived tenant.', 'invalid_state');
+  assertCondition(
+    tenant.status === 'ACTIVE',
+    'Cannot lease to an archived tenant.',
+    'invalid_state',
+  );
 
   const active = await db.lease.count({ where: { unitId: input.unitId, status: 'ACTIVE' } });
   assertCondition(active === 0, 'This unit already has an active lease.', 'conflict');
 
   return db.lease.create({
     data: {
-      organizationId,
+      ownerUserId,
       unitId: input.unitId,
       tenantId: input.tenantId,
       startDate: input.startDate,
@@ -124,7 +138,8 @@ export async function updateLease(db: ScopedDb, leaseId: string, input: LeaseUpd
     data.rentAmountCents = rentAmountCents;
     data.depositAmountCents = depositAmountCents;
   } else {
-    if (input.startDate) throw new DomainError('An active lease start date cannot be changed.', 'invalid_state');
+    if (input.startDate)
+      throw new DomainError('An active lease start date cannot be changed.', 'invalid_state');
     if (input.depositAmountCents !== undefined) {
       throw new DomainError('An active lease deposit cannot be changed.', 'invalid_state');
     }
@@ -142,7 +157,10 @@ export async function updateLease(db: ScopedDb, leaseId: string, input: LeaseUpd
       data.rentAmountCents = input.rentAmountCents;
     }
     if (input.dueDay !== undefined) {
-      assertCondition(input.dueDay >= 1 && input.dueDay <= 28, 'Rent due day must be between 1 and 28.');
+      assertCondition(
+        input.dueDay >= 1 && input.dueDay <= 28,
+        'Rent due day must be between 1 and 28.',
+      );
       data.dueDay = input.dueDay;
     }
   }
@@ -151,18 +169,22 @@ export async function updateLease(db: ScopedDb, leaseId: string, input: LeaseUpd
   assertCondition(result.count === 1, 'Lease not found.', 'not_found');
 }
 
-export async function activateLease(db: ScopedDb, organizationId: string, leaseId: string) {
+export async function activateLease(db: ScopedDb, ownerUserId: string, leaseId: string) {
   try {
     await db.$transaction(async (tx) => {
       const lease = assertFound(
-        await tx.lease.findFirst({ where: { id: leaseId, organizationId }, include: { unit: true } }),
+        await tx.lease.findFirst({ where: { id: leaseId, ownerUserId }, include: { unit: true } }),
         'Lease not found.',
       );
-      assertCondition(lease.status === 'DRAFT', 'Only a draft lease can be activated.', 'invalid_state');
+      assertCondition(
+        lease.status === 'DRAFT',
+        'Only a draft lease can be activated.',
+        'invalid_state',
+      );
 
       const active = await tx.lease.count({
         where: {
-          organizationId,
+          ownerUserId,
           unitId: lease.unitId,
           status: 'ACTIVE',
           ...(lease.predecessorLeaseId ? { id: { not: lease.predecessorLeaseId } } : {}),
@@ -172,19 +194,23 @@ export async function activateLease(db: ScopedDb, organizationId: string, leaseI
 
       if (lease.predecessorLeaseId) {
         await tx.lease.updateMany({
-          where: { id: lease.predecessorLeaseId, organizationId, status: 'ACTIVE' },
+          where: { id: lease.predecessorLeaseId, ownerUserId, status: 'ACTIVE' },
           data: { status: 'ENDED' },
         });
       }
 
       const updated = await tx.lease.updateMany({
-        where: { id: leaseId, organizationId, status: 'DRAFT' },
+        where: { id: leaseId, ownerUserId, status: 'DRAFT' },
         data: { status: 'ACTIVE' },
       });
-      assertCondition(updated.count === 1, 'Lease changed while activating. Reload and try again.', 'conflict');
+      assertCondition(
+        updated.count === 1,
+        'Lease changed while activating. Reload and try again.',
+        'conflict',
+      );
 
       await tx.unit.updateMany({
-        where: { id: lease.unitId, organizationId },
+        where: { id: lease.unitId, ownerUserId },
         data: { status: 'OCCUPIED' },
       });
     });
@@ -198,12 +224,16 @@ export async function activateLease(db: ScopedDb, organizationId: string, leaseI
 
 export async function renewLease(
   db: ScopedDb,
-  organizationId: string,
+  ownerUserId: string,
   leaseId: string,
   input: LeaseTermsInput,
 ) {
   const lease = assertFound(await getLease(db, leaseId), 'Lease not found.');
-  assertCondition(lease.status === 'ACTIVE', 'Only an active lease can be renewed.', 'invalid_state');
+  assertCondition(
+    lease.status === 'ACTIVE',
+    'Only an active lease can be renewed.',
+    'invalid_state',
+  );
   assertCondition(input.unitId === lease.unitId, 'A renewal must keep the same unit.');
   assertCondition(input.tenantId === lease.tenantId, 'A renewal must keep the same tenant.');
   validateTerms(input);
@@ -215,7 +245,7 @@ export async function renewLease(
 
   return db.lease.create({
     data: {
-      organizationId,
+      ownerUserId,
       unitId: lease.unitId,
       tenantId: lease.tenantId,
       startDate: input.startDate,
@@ -231,24 +261,28 @@ export async function renewLease(
 
 export async function terminateLease(
   db: ScopedDb,
-  organizationId: string,
+  ownerUserId: string,
   leaseId: string,
   input: { endDate: Date; reason: string },
 ) {
   assertCondition(input.reason.trim().length > 0, 'A termination reason is required.');
   await db.$transaction(async (tx) => {
     const lease = assertFound(
-      await tx.lease.findFirst({ where: { id: leaseId, organizationId } }),
+      await tx.lease.findFirst({ where: { id: leaseId, ownerUserId } }),
       'Lease not found.',
     );
-    assertCondition(lease.status === 'ACTIVE', 'Only an active lease can be terminated.', 'invalid_state');
+    assertCondition(
+      lease.status === 'ACTIVE',
+      'Only an active lease can be terminated.',
+      'invalid_state',
+    );
     assertCondition(
       input.endDate.getTime() >= lease.startDate.getTime(),
       'The end date cannot be before the lease start date.',
     );
 
     await tx.lease.updateMany({
-      where: { id: leaseId, organizationId, status: 'ACTIVE' },
+      where: { id: leaseId, ownerUserId, status: 'ACTIVE' },
       data: {
         status: 'ENDED',
         endDate: input.endDate,
@@ -257,11 +291,11 @@ export async function terminateLease(
     });
 
     const otherActive = await tx.lease.count({
-      where: { organizationId, unitId: lease.unitId, status: 'ACTIVE', id: { not: leaseId } },
+      where: { ownerUserId, unitId: lease.unitId, status: 'ACTIVE', id: { not: leaseId } },
     });
     if (otherActive === 0) {
       await tx.unit.updateMany({
-        where: { id: lease.unitId, organizationId },
+        where: { id: lease.unitId, ownerUserId },
         data: { status: 'AVAILABLE' },
       });
     }

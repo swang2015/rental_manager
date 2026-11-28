@@ -72,12 +72,12 @@ export async function getProperty(db: ScopedDb, propertyId: string) {
   });
 }
 
-export async function createProperty(db: ScopedDb, organizationId: string, input: PropertyInput) {
+export async function createProperty(db: ScopedDb, ownerUserId: string, input: PropertyInput) {
   assertCondition(input.name.trim().length > 0, 'Property name is required.');
   assertCondition(input.addressLine1.trim().length > 0, 'Street address is required.');
   return db.property.create({
     data: {
-      organizationId,
+      ownerUserId,
       name: input.name.trim(),
       addressLine1: input.addressLine1.trim(),
       city: input.city.trim(),
@@ -90,7 +90,11 @@ export async function createProperty(db: ScopedDb, organizationId: string, input
 
 export async function updateProperty(db: ScopedDb, propertyId: string, input: PropertyInput) {
   const property = assertFound(await getProperty(db, propertyId), 'Property not found.');
-  assertCondition(property.archivedAt === null, 'Archived properties cannot be edited.', 'invalid_state');
+  assertCondition(
+    property.archivedAt === null,
+    'Archived properties cannot be edited.',
+    'invalid_state',
+  );
   const result = await db.property.updateMany({
     where: { id: propertyId },
     data: {
@@ -109,7 +113,11 @@ export async function archiveProperty(db: ScopedDb, propertyId: string) {
   const activeLeases = await db.lease.count({
     where: { unit: { propertyId }, status: 'ACTIVE' },
   });
-  assertCondition(activeLeases === 0, 'End active leases before archiving this property.', 'invalid_state');
+  assertCondition(
+    activeLeases === 0,
+    'End active leases before archiving this property.',
+    'invalid_state',
+  );
   const result = await db.property.updateMany({
     where: { id: propertyId, archivedAt: null },
     data: { archivedAt: new Date() },
@@ -119,14 +127,21 @@ export async function archiveProperty(db: ScopedDb, propertyId: string) {
 
 export async function listUnits(
   db: ScopedDb,
-  options: { propertyId?: string; status?: string; search?: string; includeArchived?: boolean } = {},
+  options: {
+    propertyId?: string;
+    status?: string;
+    search?: string;
+    includeArchived?: boolean;
+  } = {},
 ) {
   const search = options.search?.trim();
   return db.unit.findMany({
     where: {
       ...(options.includeArchived ? {} : { archivedAt: null }),
       ...(options.propertyId ? { propertyId: options.propertyId } : {}),
-      ...(options.status ? { status: options.status as 'AVAILABLE' | 'OCCUPIED' | 'OFF_MARKET' } : {}),
+      ...(options.status
+        ? { status: options.status as 'AVAILABLE' | 'OCCUPIED' | 'OFF_MARKET' }
+        : {}),
       ...(search
         ? {
             OR: [
@@ -150,12 +165,16 @@ export async function listUnits(
 
 export async function createUnit(
   db: ScopedDb,
-  organizationId: string,
+  ownerUserId: string,
   propertyId: string,
   input: UnitInput,
 ) {
   const property = assertFound(await getProperty(db, propertyId), 'Property not found.');
-  assertCondition(property.archivedAt === null, 'Cannot add units to an archived property.', 'invalid_state');
+  assertCondition(
+    property.archivedAt === null,
+    'Cannot add units to an archived property.',
+    'invalid_state',
+  );
   assertCondition(input.label.trim().length > 0, 'Unit label is required.');
   assertCondition(input.bedrooms >= 0, 'Bedrooms cannot be negative.');
   assertCondition(input.bathrooms >= 0, 'Bathrooms cannot be negative.');
@@ -164,7 +183,7 @@ export async function createUnit(
   try {
     return await db.unit.create({
       data: {
-        organizationId,
+        ownerUserId,
         propertyId,
         label: input.label.trim(),
         bedrooms: input.bedrooms,
@@ -181,10 +200,7 @@ export async function createUnit(
 }
 
 export async function updateUnit(db: ScopedDb, unitId: string, input: UnitInput) {
-  const unit = assertFound(
-    await db.unit.findFirst({ where: { id: unitId } }),
-    'Unit not found.',
-  );
+  const unit = assertFound(await db.unit.findFirst({ where: { id: unitId } }), 'Unit not found.');
   assertCondition(unit.archivedAt === null, 'Archived units cannot be edited.', 'invalid_state');
   try {
     const result = await db.unit.updateMany({
@@ -207,7 +223,11 @@ export async function updateUnit(db: ScopedDb, unitId: string, input: UnitInput)
 
 export async function setUnitOffMarket(db: ScopedDb, unitId: string) {
   const active = await db.lease.count({ where: { unitId, status: 'ACTIVE' } });
-  assertCondition(active === 0, 'A unit with an active lease cannot be marked off-market.', 'invalid_state');
+  assertCondition(
+    active === 0,
+    'A unit with an active lease cannot be marked off-market.',
+    'invalid_state',
+  );
   const result = await db.unit.updateMany({
     where: { id: unitId, archivedAt: null },
     data: { status: 'OFF_MARKET' },
@@ -217,7 +237,11 @@ export async function setUnitOffMarket(db: ScopedDb, unitId: string) {
 
 export async function setUnitAvailable(db: ScopedDb, unitId: string) {
   const active = await db.lease.count({ where: { unitId, status: 'ACTIVE' } });
-  assertCondition(active === 0, 'A unit with an active lease cannot be marked available.', 'invalid_state');
+  assertCondition(
+    active === 0,
+    'A unit with an active lease cannot be marked available.',
+    'invalid_state',
+  );
   const result = await db.unit.updateMany({
     where: { id: unitId, archivedAt: null },
     data: { status: 'AVAILABLE' },
@@ -227,7 +251,11 @@ export async function setUnitAvailable(db: ScopedDb, unitId: string) {
 
 export async function archiveUnit(db: ScopedDb, unitId: string) {
   const active = await db.lease.count({ where: { unitId, status: 'ACTIVE' } });
-  assertCondition(active === 0, 'End the active lease before archiving this unit.', 'invalid_state');
+  assertCondition(
+    active === 0,
+    'End the active lease before archiving this unit.',
+    'invalid_state',
+  );
   const result = await db.unit.updateMany({
     where: { id: unitId, archivedAt: null },
     data: { archivedAt: new Date() },
@@ -237,7 +265,11 @@ export async function archiveUnit(db: ScopedDb, unitId: string) {
 
 export async function removeUnit(db: ScopedDb, unitId: string) {
   const leaseCount = await db.lease.count({ where: { unitId } });
-  assertCondition(leaseCount === 0, 'A unit with lease history cannot be removed. Archive it instead.', 'invalid_state');
+  assertCondition(
+    leaseCount === 0,
+    'A unit with lease history cannot be removed. Archive it instead.',
+    'invalid_state',
+  );
   const result = await db.unit.deleteMany({ where: { id: unitId } });
   assertCondition(result.count === 1, 'Unit not found.', 'not_found');
 }
@@ -253,8 +285,8 @@ export async function listAvailableUnits(db: ScopedDb) {
 export function isUniqueError(error: unknown): boolean {
   return Boolean(
     error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      (error as { code?: string }).code === 'P2002',
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as { code?: string }).code === 'P2002',
   );
 }

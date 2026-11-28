@@ -74,7 +74,7 @@ const CHARGE_INCLUDE = {
 
 export async function ensureChargesForPeriod(
   db: ScopedDb,
-  organizationId: string,
+  ownerUserId: string,
   period: { year: number; month: number },
 ): Promise<number> {
   const start = monthStart(period.year, period.month);
@@ -93,7 +93,7 @@ export async function ensureChargesForPeriod(
 
   const result = await db.rentCharge.createMany({
     data: leases.map((lease) => ({
-      organizationId,
+      ownerUserId,
       leaseId: lease.id,
       periodStart: start,
       dueDate: dueDateFor(start, lease.dueDay),
@@ -119,7 +119,12 @@ export async function listCharges(
   },
 ): Promise<{
   rows: ChargeRow[];
-  totals: { billedCents: number; collectedCents: number; outstandingCents: number; overdueCount: number };
+  totals: {
+    billedCents: number;
+    collectedCents: number;
+    outstandingCents: number;
+    overdueCount: number;
+  };
 }> {
   const start = monthStart(options.year, options.month);
   const end = monthEnd(options.year, options.month);
@@ -171,7 +176,7 @@ export async function getCharge(db: ScopedDb, timezone: string, chargeId: string
 
 export async function recordPayment(
   db: ScopedDb,
-  organizationId: string,
+  ownerUserId: string,
   chargeId: string,
   input: {
     amountCents: number;
@@ -185,7 +190,7 @@ export async function recordPayment(
 
   await db.$transaction(async (tx) => {
     const charge = assertFound(
-      await tx.rentCharge.findFirst({ where: { id: chargeId, organizationId } }),
+      await tx.rentCharge.findFirst({ where: { id: chargeId, ownerUserId } }),
       'Charge not found.',
     );
     assertCondition(
@@ -195,7 +200,7 @@ export async function recordPayment(
 
     await tx.payment.create({
       data: {
-        organizationId,
+        ownerUserId,
         chargeId,
         amountCents: input.amountCents,
         paidOn: input.paidOn,
@@ -206,7 +211,7 @@ export async function recordPayment(
     });
 
     await tx.rentCharge.updateMany({
-      where: { id: chargeId, organizationId },
+      where: { id: chargeId, ownerUserId },
       data: { balanceCents: { decrement: input.amountCents } },
     });
   });
@@ -214,7 +219,7 @@ export async function recordPayment(
 
 export async function recordAdjustment(
   db: ScopedDb,
-  organizationId: string,
+  ownerUserId: string,
   chargeId: string,
   input: { amountCents: number; reason: string; createdByUserId: string },
 ): Promise<void> {
@@ -223,7 +228,7 @@ export async function recordAdjustment(
 
   await db.$transaction(async (tx) => {
     const charge = assertFound(
-      await tx.rentCharge.findFirst({ where: { id: chargeId, organizationId } }),
+      await tx.rentCharge.findFirst({ where: { id: chargeId, ownerUserId } }),
       'Charge not found.',
     );
     assertCondition(
@@ -233,7 +238,7 @@ export async function recordAdjustment(
 
     await tx.adjustment.create({
       data: {
-        organizationId,
+        ownerUserId,
         chargeId,
         amountCents: input.amountCents,
         reason: input.reason.trim(),
@@ -242,7 +247,7 @@ export async function recordAdjustment(
     });
 
     await tx.rentCharge.updateMany({
-      where: { id: chargeId, organizationId },
+      where: { id: chargeId, ownerUserId },
       data: { balanceCents: { decrement: input.amountCents } },
     });
   });

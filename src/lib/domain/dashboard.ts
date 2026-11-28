@@ -31,7 +31,7 @@ export async function maintenanceSummary(db: ScopedDb, now = new Date(), propert
       id: true,
       priority: true,
       createdAt: true,
-      workOrder: { select: { assigneeMembershipId: true } },
+      workOrder: { select: { vendorId: true } },
     },
   });
 
@@ -41,7 +41,7 @@ export async function maintenanceSummary(db: ScopedDb, now = new Date(), propert
 
   for (const request of requests) {
     byPriority[request.priority] += 1;
-    if (!request.workOrder || !request.workOrder.assigneeMembershipId) unassigned += 1;
+    if (!request.workOrder || !request.workOrder.vendorId) unassigned += 1;
     if (request.createdAt.getTime() < staleBefore.getTime()) stale += 1;
   }
 

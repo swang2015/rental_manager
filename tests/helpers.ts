@@ -4,36 +4,33 @@ import { hashPassword } from '@/lib/auth/password';
 
 export async function resetDb(): Promise<void> {
   await prisma.$executeRawUnsafe(
-    `TRUNCATE TABLE "WorkOrderEvent", "WorkOrder", "RequestEvent", "MaintenanceRequest", "Adjustment", "Payment", "RentCharge", "Lease", "Unit", "Property", "Tenant", "Invitation", "Membership", "Session", "User", "Organization" CASCADE`,
+    `TRUNCATE TABLE "WorkOrderEvent", "RequestEvent", "WorkOrder", "MaintenanceRequest", "Adjustment", "Payment", "RentCharge", "Lease", "Unit", "Property", "Invitation", "Vendor", "Tenant", "UserRole", "Session", "User" CASCADE`,
   );
-}
-
-export async function createOrganization(name = 'Test Org', timezone = 'UTC') {
-  return prisma.organization.create({
-    data: { name, slug: `${name.toLowerCase().replace(/\s+/g, '-')}-${randomUUID().slice(0, 8)}`, timezone },
-  });
 }
 
 export async function createUser(email: string, name = 'Test User') {
   return prisma.user.create({
-    data: { email, name, passwordHash: await hashPassword('password123') },
+    data: { email, name, passwordHash: await hashPassword('password123'), status: 'ACTIVE' },
   });
 }
 
-export async function createMembership(
-  organizationId: string,
-  userId: string,
-  role: 'OWNER' | 'PROPERTY_MANAGER' | 'STAFF' = 'OWNER',
-) {
-  return prisma.membership.create({
-    data: { organizationId, userId, role, status: 'ACTIVE' },
+export async function createOwner(name = 'Test Owner', timezone = 'UTC') {
+  return prisma.user.create({
+    data: {
+      email: `owner-${randomUUID().slice(0, 8)}@example.test`,
+      name,
+      passwordHash: await hashPassword('password123'),
+      timezone,
+      status: 'ACTIVE',
+      roles: { create: { role: 'OWNER' } },
+    },
   });
 }
 
-export async function createProperty(organizationId: string, name = 'Test Property') {
+export async function createProperty(ownerUserId: string, name = 'Test Property') {
   return prisma.property.create({
     data: {
-      organizationId,
+      ownerUserId,
       name,
       addressLine1: '1 Test Street',
       city: 'Testville',
@@ -44,14 +41,14 @@ export async function createProperty(organizationId: string, name = 'Test Proper
 }
 
 export async function createUnit(
-  organizationId: string,
+  ownerUserId: string,
   propertyId: string,
   label = '1A',
   rentAmountCents = 100_000,
 ) {
   return prisma.unit.create({
     data: {
-      organizationId,
+      ownerUserId,
       propertyId,
       label,
       bedrooms: 2,
@@ -63,12 +60,40 @@ export async function createUnit(
 }
 
 export async function createTenant(
-  organizationId: string,
+  ownerUserId: string,
   email = `tenant-${randomUUID().slice(0, 8)}@example.test`,
   name = 'Test Tenant',
 ) {
+  const user = await prisma.user.create({
+    data: {
+      email,
+      name,
+      passwordHash: await hashPassword('password123'),
+      status: 'ACTIVE',
+      roles: { create: { role: 'TENANT' } },
+    },
+  });
   return prisma.tenant.create({
-    data: { organizationId, name, email, phone: null },
+    data: { ownerUserId, userId: user.id, name, email, phone: null },
+  });
+}
+
+export async function createVendor(
+  ownerUserId: string,
+  email = `vendor-${randomUUID().slice(0, 8)}@example.test`,
+  name = 'Test Vendor',
+) {
+  const user = await prisma.user.create({
+    data: {
+      email,
+      name,
+      passwordHash: await hashPassword('password123'),
+      status: 'ACTIVE',
+      roles: { create: { role: 'VENDOR' } },
+    },
+  });
+  return prisma.vendor.create({
+    data: { ownerUserId, userId: user.id, name, company: 'Test Co.', trade: 'Plumbing' },
   });
 }
 
@@ -77,7 +102,7 @@ export function utcDate(input: string): Date {
 }
 
 export async function createLease(input: {
-  organizationId: string;
+  ownerUserId: string;
   unitId: string;
   tenantId: string;
   status?: 'DRAFT' | 'ACTIVE' | 'ENDED';
@@ -88,7 +113,7 @@ export async function createLease(input: {
 }) {
   return prisma.lease.create({
     data: {
-      organizationId: input.organizationId,
+      ownerUserId: input.ownerUserId,
       unitId: input.unitId,
       tenantId: input.tenantId,
       startDate: input.startDate ?? utcDate('2026-01-01'),

@@ -2,13 +2,13 @@ import type { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/db';
 
 /**
- * Models that carry an organizationId. Every read/write for these models must
- * go through scopedDb(orgId), which injects the organization filter.
+ * Models that carry an ownerUserId. Every read/write for these models must go
+ * through scopedDb(ownerUserId), which injects the owner filter.
  */
 const SCOPED_MODELS = new Set([
-  'Membership',
   'Invitation',
   'Tenant',
+  'Vendor',
   'Property',
   'Unit',
   'Lease',
@@ -32,25 +32,26 @@ const FILTER_OPERATIONS = new Set([
   'deleteMany',
 ]);
 
-const UNSAFE_OPERATIONS = new Set(['findUnique', 'findUniqueOrThrow', 'update', 'delete', 'upsert']);
+const UNSAFE_OPERATIONS = new Set([
+  'findUnique',
+  'findUniqueOrThrow',
+  'update',
+  'delete',
+  'upsert',
+]);
 
 /**
- * Returns a Prisma client that refuses unscoped operations on organization-owned
- * models and automatically adds the organization filter to safe operations.
- * Use updateMany/deleteMany + findFirst instead of update/delete/findUnique.
- */
-/**
- * Returns a Prisma client that refuses unscoped operations on organization-owned
- * models and automatically adds the organization filter to safe operations.
+ * Returns a Prisma client that refuses unscoped operations on owner-owned
+ * models and automatically adds the owner filter to safe operations.
  * Use updateMany/deleteMany + findFirst instead of update/delete/findUnique.
  *
  * The return type is the base client so Prisma keeps its precise query types;
- * the query hook above injects `organizationId` at runtime, which is why
- * create calls also pass it explicitly.
+ * the query hook above injects `ownerUserId` at runtime, which is why create
+ * calls also pass it explicitly.
  */
-export function scopedDb(organizationId: string): PrismaClient {
-  if (!organizationId) {
-    throw new Error('scopedDb requires an organizationId');
+export function scopedDb(ownerUserId: string): PrismaClient {
+  if (!ownerUserId) {
+    throw new Error('scopedDb requires an ownerUserId');
   }
 
   return prisma.$extends({
@@ -70,17 +71,17 @@ export function scopedDb(organizationId: string): PrismaClient {
           const next = { ...(args as Record<string, unknown>) };
 
           if (FILTER_OPERATIONS.has(operation)) {
-            next.where = { ...((next.where as Record<string, unknown>) ?? {}), organizationId };
+            next.where = { ...((next.where as Record<string, unknown>) ?? {}), ownerUserId };
           }
 
           if (operation === 'create') {
-            next.data = { organizationId, ...((next.data as Record<string, unknown>) ?? {}) };
+            next.data = { ownerUserId, ...((next.data as Record<string, unknown>) ?? {}) };
           }
 
           if (operation === 'createMany' || operation === 'createManyAndReturn') {
             const rows = Array.isArray(next.data) ? next.data : [next.data];
             next.data = rows.map((row) => ({
-              organizationId,
+              ownerUserId,
               ...((row as Record<string, unknown>) ?? {}),
             }));
           }

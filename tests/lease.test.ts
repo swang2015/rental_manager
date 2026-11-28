@@ -1,23 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '@/lib/db';
 import { scopedDb } from '@/lib/db/scoped';
-import {
-  activateLease,
-  createDraftLease,
-  renewLease,
-  terminateLease,
-} from '@/lib/domain/leases';
-import {
-  createOrganization,
-  createProperty,
-  createTenant,
-  createUnit,
-  resetDb,
-  utcDate,
-} from './helpers';
+import { activateLease, createDraftLease, renewLease, terminateLease } from '@/lib/domain/leases';
+import { createOwner, createProperty, createTenant, createUnit, resetDb, utcDate } from './helpers';
 
 async function fixture() {
-  const org = await createOrganization('Lease Org');
+  const org = await createOwner('Lease Org');
   const property = await createProperty(org.id);
   const unit = await createUnit(org.id, property.id, '1A', 250_000);
   const tenant = await createTenant(org.id);
@@ -75,7 +63,9 @@ describe('lease lifecycle', () => {
     let storedUnit = await prisma.unit.findUniqueOrThrow({ where: { id: unit.id } });
     expect(storedUnit.status).toBe('OCCUPIED');
 
-    await expect(activateLease(db, org.id, second.id)).rejects.toThrow(/already has an active lease/);
+    await expect(activateLease(db, org.id, second.id)).rejects.toThrow(
+      /already has an active lease/,
+    );
 
     storedUnit = await prisma.unit.findUniqueOrThrow({ where: { id: unit.id } });
     expect(storedUnit.status).toBe('OCCUPIED');
@@ -85,7 +75,7 @@ describe('lease lifecycle', () => {
   it('enforces one active lease per unit at the database level', async () => {
     const { org, unit, tenant } = await fixture();
     const base = {
-      organizationId: org.id,
+      ownerUserId: org.id,
       unitId: unit.id,
       tenantId: tenant.id,
       startDate: utcDate('2026-01-01'),
@@ -131,13 +121,21 @@ describe('lease lifecycle', () => {
 
     expect(successor.status).toBe('DRAFT');
     expect(successor.predecessorLeaseId).toBe(lease.id);
-    expect((await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).status).toBe('ACTIVE');
+    expect((await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).status).toBe(
+      'ACTIVE',
+    );
 
     await activateLease(db, org.id, successor.id);
 
-    expect((await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).status).toBe('ENDED');
-    expect((await prisma.lease.findUniqueOrThrow({ where: { id: successor.id } })).status).toBe('ACTIVE');
-    expect((await prisma.unit.findUniqueOrThrow({ where: { id: unit.id } })).status).toBe('OCCUPIED');
+    expect((await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).status).toBe(
+      'ENDED',
+    );
+    expect((await prisma.lease.findUniqueOrThrow({ where: { id: successor.id } })).status).toBe(
+      'ACTIVE',
+    );
+    expect((await prisma.unit.findUniqueOrThrow({ where: { id: unit.id } })).status).toBe(
+      'OCCUPIED',
+    );
   });
 
   it('does not allow a second renewal draft for the same lease', async () => {

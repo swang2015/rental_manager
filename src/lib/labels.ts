@@ -48,8 +48,8 @@ export const PRIORITY_LABEL: Record<string, string> = {
 
 export const ROLE_LABEL: Record<string, string> = {
   OWNER: 'Owner',
-  PROPERTY_MANAGER: 'Property manager',
-  STAFF: 'Staff',
+  TENANT: 'Tenant',
+  VENDOR: 'Vendor',
 };
 
 type Tone = 'gray' | 'green' | 'amber' | 'red' | 'blue';

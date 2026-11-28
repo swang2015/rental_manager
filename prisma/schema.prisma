@@ -8,23 +8,24 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum MembershipRole {
+enum UserRoleType {
   OWNER
-  PROPERTY_MANAGER
-  STAFF
+  TENANT
+  VENDOR
 }
 
-enum MembershipStatus {
+enum UserStatus {
+  PENDING
   ACTIVE
   DISABLED
 }
 
-enum InvitationKind {
-  MANAGER
-  TENANT
+enum TenantStatus {
+  ACTIVE
+  ARCHIVED
 }
 
-enum TenantStatus {
+enum VendorStatus {
   ACTIVE
   ARCHIVED
 }
@@ -69,47 +70,47 @@ enum WorkOrderStatus {
   CLOSED
 }
 
-model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  timezone  String   @default("UTC")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  memberships         Membership[]
-  invitations         Invitation[]
-  tenants             Tenant[]
-  properties          Property[]
-  units               Unit[]
-  leases              Lease[]
-  rentCharges         RentCharge[]
-  payments            Payment[]
-  adjustments         Adjustment[]
-  maintenanceRequests MaintenanceRequest[]
-  workOrders          WorkOrder[]
-  workOrderEvents     WorkOrderEvent[]
-  requestEvents       RequestEvent[]
-}
-
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  name         String
-  isSuperAdmin Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String       @id @default(cuid())
+  email         String       @unique
+  passwordHash  String
+  name          String
+  phone         String?
+  timezone      String       @default("UTC")
+  isSuperAdmin  Boolean      @default(false)
+  status        UserStatus   @default(ACTIVE)
+  requestedRole UserRoleType?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
-  memberships      Membership[]
+  roles            UserRole[]
   sessions         Session[]
-  tenantRecords    Tenant[]             @relation("TenantPortalUser")
+  properties       Property[]           @relation("PropertyOwner")
+  tenantDirectory  Tenant[]             @relation("TenantOwner")
+  vendorDirectory  Vendor[]             @relation("VendorOwner")
+  tenancies        Tenant[]             @relation("TenantUser")
+  vendors          Vendor[]             @relation("VendorUser")
   invitationsSent  Invitation[]         @relation("InvitationSender")
+  invitationsOwned Invitation[]         @relation("InvitationOwner")
   paymentsRecorded Payment[]            @relation("PaymentRecorder")
   adjustments      Adjustment[]         @relation("AdjustmentCreator")
   requestsCreated  MaintenanceRequest[] @relation("RequestCreator")
   workOrderEvents  WorkOrderEvent[]     @relation("WorkOrderEventActor")
   requestEvents    RequestEvent[]       @relation("RequestEventActor")
+
+  @@index([status, isSuperAdmin])
+}
+
+model UserRole {
+  id        String       @id @default(cuid())
+  userId    String
+  role      UserRoleType
+  createdAt DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@index([role])
 }
 
 model Session {
@@ -125,69 +126,69 @@ model Session {
   @@index([expiresAt])
 }
 
-model Membership {
-  id             String           @id @default(cuid())
-  organizationId String
-  userId         String
-  role           MembershipRole
-  status         MembershipStatus @default(ACTIVE)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workOrders   WorkOrder[]  @relation("WorkOrderAssignee")
-
-  @@unique([organizationId, userId])
-  @@index([organizationId, role])
-}
-
 model Invitation {
-  id              String          @id @default(cuid())
-  organizationId  String
+  id              String       @id @default(cuid())
   email           String
-  kind            InvitationKind
-  role            MembershipRole?
-  tenantId        String?
-  tokenHash       String          @unique
+  role            UserRoleType
+  ownerUserId     String?
+  tokenHash       String       @unique
   expiresAt       DateTime
   acceptedAt      DateTime?
   invitedByUserId String
-  createdAt       DateTime        @default(now())
+  createdAt       DateTime     @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  tenant       Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  invitedBy    User         @relation("InvitationSender", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  owner     User? @relation("InvitationOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  invitedBy User  @relation("InvitationSender", fields: [invitedByUserId], references: [id], onDelete: Cascade)
 
-  @@index([organizationId, kind, acceptedAt])
   @@index([email])
+  @@index([ownerUserId, role, acceptedAt])
 }
 
 model Tenant {
   id             String       @id @default(cuid())
-  organizationId String
+  ownerUserId    String
+  userId         String
   name           String
   email          String
   phone          String?
-  portalUserId   String?
   status         TenantStatus @default(ACTIVE)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  portalUser   User?                @relation("TenantPortalUser", fields: [portalUserId], references: [id], onDelete: SetNull)
-  leases       Lease[]
-  requests     MaintenanceRequest[]
-  invitations  Invitation[]
+  owner    User   @relation("TenantOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  user     User   @relation("TenantUser", fields: [userId], references: [id], onDelete: Cascade)
+  leases   Lease[]
+  requests MaintenanceRequest[]
 
-  @@unique([organizationId, email])
-  @@index([organizationId, status])
-  @@index([portalUserId])
+  @@unique([ownerUserId, userId])
+  @@index([ownerUserId, status])
+  @@index([userId])
+}
+
+model Vendor {
+  id             String       @id @default(cuid())
+  ownerUserId    String
+  userId         String
+  name           String
+  company        String?
+  trade          String?
+  phone          String?
+  status         VendorStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  owner      User        @relation("VendorOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  user       User        @relation("VendorUser", fields: [userId], references: [id], onDelete: Cascade)
+  workOrders WorkOrder[]
+
+  @@unique([ownerUserId, userId])
+  @@index([ownerUserId, status])
+  @@index([userId])
 }
 
 model Property {
   id             String    @id @default(cuid())
-  organizationId String
+  ownerUserId    String
   name           String
   addressLine1   String
   city           String
@@ -198,16 +199,16 @@ model Property {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  units        Unit[]
+  owner User   @relation("PropertyOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  units Unit[]
 
-  @@index([organizationId, archivedAt])
-  @@index([organizationId, name])
+  @@index([ownerUserId, archivedAt])
+  @@index([ownerUserId, name])
 }
 
 model Unit {
   id              String     @id @default(cuid())
-  organizationId  String
+  ownerUserId     String
   propertyId      String
   label           String
   bedrooms        Int
@@ -218,19 +219,18 @@ model Unit {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  property     Property             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  leases       Lease[]
-  requests     MaintenanceRequest[]
+  property Property             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  leases   Lease[]
+  requests MaintenanceRequest[]
 
   @@unique([propertyId, label])
-  @@index([organizationId, status])
-  @@index([organizationId, propertyId])
+  @@index([ownerUserId, status])
+  @@index([ownerUserId, propertyId])
 }
 
 model Lease {
   id                 String      @id @default(cuid())
-  organizationId     String
+  ownerUserId        String
   unitId             String
   tenantId           String
   startDate          DateTime    @db.Date
@@ -244,21 +244,20 @@ model Lease {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  unit         Unit         @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  charges      RentCharge[]
-  predecessor  Lease?       @relation("LeaseRenewal", fields: [predecessorLeaseId], references: [id], onDelete: SetNull)
-  successor    Lease?       @relation("LeaseRenewal")
+  unit        Unit        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  charges     RentCharge[]
+  predecessor Lease?      @relation("LeaseRenewal", fields: [predecessorLeaseId], references: [id], onDelete: SetNull)
+  successor   Lease?      @relation("LeaseRenewal")
 
-  @@index([organizationId, status])
-  @@index([organizationId, unitId])
-  @@index([organizationId, tenantId])
+  @@index([ownerUserId, status])
+  @@index([ownerUserId, unitId])
+  @@index([ownerUserId, tenantId])
 }
 
 model RentCharge {
   id             String   @id @default(cuid())
-  organizationId String
+  ownerUserId    String
   leaseId        String
   periodStart    DateTime @db.Date
   dueDate        DateTime @db.Date
@@ -267,19 +266,18 @@ model RentCharge {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  lease        Lease        @relation(fields: [leaseId], references: [id], onDelete: Cascade)
-  payments     Payment[]
-  adjustments  Adjustment[]
+  lease       Lease        @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  payments    Payment[]
+  adjustments Adjustment[]
 
   @@unique([leaseId, periodStart])
-  @@index([organizationId, dueDate])
-  @@index([organizationId, balanceCents])
+  @@index([ownerUserId, dueDate])
+  @@index([ownerUserId, balanceCents])
 }
 
 model Payment {
   id               String        @id @default(cuid())
-  organizationId   String
+  ownerUserId      String
   chargeId         String
   amountCents      Int
   paidOn           DateTime      @db.Date
@@ -288,34 +286,32 @@ model Payment {
   recordedByUserId String
   createdAt        DateTime      @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  charge       RentCharge   @relation(fields: [chargeId], references: [id], onDelete: Cascade)
-  recordedBy   User         @relation("PaymentRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+  charge     RentCharge @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  recordedBy User       @relation("PaymentRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
 
-  @@index([organizationId, paidOn])
+  @@index([ownerUserId, paidOn])
   @@index([chargeId])
 }
 
 model Adjustment {
   id              String   @id @default(cuid())
-  organizationId  String
+  ownerUserId     String
   chargeId        String
   amountCents     Int
   reason          String
   createdByUserId String
   createdAt       DateTime @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  charge       RentCharge   @relation(fields: [chargeId], references: [id], onDelete: Cascade)
-  createdBy    User         @relation("AdjustmentCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  charge    RentCharge @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  createdBy User       @relation("AdjustmentCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
-  @@index([organizationId, createdAt])
+  @@index([ownerUserId, createdAt])
   @@index([chargeId])
 }
 
 model MaintenanceRequest {
   id              String              @id @default(cuid())
-  organizationId  String
+  ownerUserId     String
   unitId          String
   tenantId        String
   category        String
@@ -328,41 +324,39 @@ model MaintenanceRequest {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  unit         Unit           @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  createdBy    User?          @relation("RequestCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  workOrder    WorkOrder?
-  events       RequestEvent[]
+  unit      Unit        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdBy User?       @relation("RequestCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  workOrder WorkOrder?
+  events    RequestEvent[]
 
-  @@index([organizationId, status, priority])
-  @@index([organizationId, unitId])
+  @@index([ownerUserId, status, priority])
+  @@index([ownerUserId, unitId])
 }
 
 model WorkOrder {
-  id                   String          @id @default(cuid())
-  organizationId       String
-  requestId            String          @unique
-  assigneeMembershipId String?
-  scheduledFor         DateTime?       @db.Date
-  status               WorkOrderStatus @default(SCHEDULED)
-  resolutionNote       String?
-  closedAt             DateTime?
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
+  id             String          @id @default(cuid())
+  ownerUserId    String
+  requestId      String          @unique
+  vendorId       String?
+  scheduledFor   DateTime?       @db.Date
+  status         WorkOrderStatus @default(SCHEDULED)
+  resolutionNote String?
+  closedAt       DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  request      MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  assignee     Membership?        @relation("WorkOrderAssignee", fields: [assigneeMembershipId], references: [id], onDelete: SetNull)
-  events       WorkOrderEvent[]
+  request MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  vendor  Vendor?            @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  events  WorkOrderEvent[]
 
-  @@index([organizationId, status])
-  @@index([organizationId, assigneeMembershipId])
+  @@index([ownerUserId, status])
+  @@index([ownerUserId, vendorId])
 }
 
 model WorkOrderEvent {
   id             String           @id @default(cuid())
-  organizationId String
+  ownerUserId    String
   workOrderId    String
   fromStatus     WorkOrderStatus?
   toStatus       WorkOrderStatus
@@ -370,16 +364,15 @@ model WorkOrderEvent {
   actorUserId    String
   createdAt      DateTime         @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  workOrder    WorkOrder    @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  actor        User         @relation("WorkOrderEventActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  actor     User      @relation("WorkOrderEventActor", fields: [actorUserId], references: [id], onDelete: Restrict)
 
   @@index([workOrderId, createdAt])
 }
 
 model RequestEvent {
   id             String             @id @default(cuid())
-  organizationId String
+  ownerUserId    String
   requestId      String
   fromStatus     MaintenanceStatus?
   toStatus       MaintenanceStatus
@@ -387,9 +380,8 @@ model RequestEvent {
   actorUserId    String?
   createdAt      DateTime           @default(now())
 
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  request      MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  actor        User?              @relation("RequestEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  request MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actor   User?              @relation("RequestEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([requestId, createdAt])
 }

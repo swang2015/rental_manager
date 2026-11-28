@@ -11,7 +11,7 @@ export function listRequests(
     status?: string;
     priority?: string;
     category?: string;
-    assigneeMembershipId?: string;
+    vendorId?: string;
     search?: string;
   } = {},
 ) {
@@ -24,9 +24,7 @@ export function listRequests(
         : {}),
       ...(options.priority ? { priority: options.priority as 'LOW' | 'MEDIUM' | 'URGENT' } : {}),
       ...(options.category ? { category: options.category } : {}),
-      ...(options.assigneeMembershipId
-        ? { workOrder: { assigneeMembershipId: options.assigneeMembershipId } }
-        : {}),
+      ...(options.vendorId ? { workOrder: { vendorId: options.vendorId } } : {}),
       ...(search
         ? {
             OR: [
@@ -39,7 +37,7 @@ export function listRequests(
     include: {
       unit: { include: { property: true } },
       tenant: true,
-      workOrder: { include: { assignee: { include: { user: true } } } },
+      workOrder: { include: { vendor: true } },
     },
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
   });
@@ -51,7 +49,7 @@ export async function getRequest(db: ScopedDb, requestId: string) {
     include: {
       unit: { include: { property: true } },
       tenant: true,
-      workOrder: { include: { assignee: { include: { user: true } }, events: { orderBy: { createdAt: 'desc' } } } },
+      workOrder: { include: { vendor: true, events: { orderBy: { createdAt: 'desc' } } } },
       events: { orderBy: { createdAt: 'desc' } },
     },
   });
@@ -59,7 +57,7 @@ export async function getRequest(db: ScopedDb, requestId: string) {
 
 export async function createRequest(
   db: ScopedDb,
-  organizationId: string,
+  ownerUserId: string,
   input: {
     unitId: string;
     tenantId: string;
@@ -74,7 +72,7 @@ export async function createRequest(
 
   const request = await db.maintenanceRequest.create({
     data: {
-      organizationId,
+      ownerUserId,
       unitId: input.unitId,
       tenantId: input.tenantId,
       category: input.category.trim(),
@@ -87,7 +85,7 @@ export async function createRequest(
 
   await db.requestEvent.create({
     data: {
-      organizationId,
+      ownerUserId,
       requestId: request.id,
       fromStatus: null,
       toStatus: 'OPEN',
@@ -101,7 +99,7 @@ export async function createRequest(
 
 export async function triageRequest(
   db: ScopedDb,
-  organizationId: string,
+  ownerUserId: string,
   requestId: string,
   input: { priority: 'LOW' | 'MEDIUM' | 'URGENT'; note?: string | null; actorUserId: string },
 ) {
@@ -119,7 +117,7 @@ export async function triageRequest(
 
   await db.requestEvent.create({
     data: {
-      organizationId,
+      ownerUserId,
       requestId,
       fromStatus: request.status,
       toStatus: request.status,
@@ -133,25 +131,29 @@ export async function triageRequest(
 
 export async function createWorkOrder(
   db: ScopedDb,
-  organizationId: string,
+  ownerUserId: string,
   requestId: string,
-  input: { assigneeMembershipId: string; scheduledFor: Date; actorUserId: string; note?: string | null },
+  input: { vendorId: string; scheduledFor: Date; actorUserId: string; note?: string | null },
 ) {
   const request = assertFound(await getRequest(db, requestId), 'Request not found.');
-  assertCondition(request.status === 'OPEN', 'Only an open request can become a work order.', 'invalid_state');
+  assertCondition(
+    request.status === 'OPEN',
+    'Only an open request can become a work order.',
+    'invalid_state',
+  );
   assertCondition(request.workOrder === null, 'This request already has a work order.', 'conflict');
 
   assertFound(
-    await db.membership.findFirst({ where: { id: input.assigneeMembershipId, status: 'ACTIVE' } }),
-    'Assignee not found.',
+    await db.vendor.findFirst({ where: { id: input.vendorId, status: 'ACTIVE' } }),
+    'Vendor not found.',
   );
 
   await db.$transaction(async (tx) => {
     const workOrder = await tx.workOrder.create({
       data: {
-        organizationId,
+        ownerUserId,
         requestId,
-        assigneeMembershipId: input.assigneeMembershipId,
+        vendorId: input.vendorId,
         scheduledFor: input.scheduledFor,
         status: 'SCHEDULED',
       },
@@ -159,7 +161,7 @@ export async function createWorkOrder(
 
     await tx.workOrderEvent.create({
       data: {
-        organizationId,
+        ownerUserId,
         workOrderId: workOrder.id,
         fromStatus: null,
         toStatus: 'SCHEDULED',
@@ -175,7 +177,7 @@ export async function createWorkOrder(
 
     await tx.requestEvent.create({
       data: {
-        organizationId,
+        ownerUserId,
         requestId,
         fromStatus: 'OPEN',
         toStatus: 'IN_PROGRESS',
@@ -188,24 +190,28 @@ export async function createWorkOrder(
 
 export async function reassignWorkOrder(
   db: ScopedDb,
-  organizationId: string,
+  ownerUserId: string,
   workOrderId: string,
-  input: { assigneeMembershipId: string; actorUserId: string },
+  input: { vendorId: string; actorUserId: string },
 ) {
   const workOrder = assertFound(
     await db.workOrder.findFirst({ where: { id: workOrderId } }),
     'Work order not found.',
   );
-  assertCondition(workOrder.status !== 'CLOSED', 'A closed work order cannot be reassigned.', 'invalid_state');
+  assertCondition(
+    workOrder.status !== 'CLOSED',
+    'A closed work order cannot be reassigned.',
+    'invalid_state',
+  );
 
   await db.workOrder.updateMany({
     where: { id: workOrderId },
-    data: { assigneeMembershipId: input.assigneeMembershipId },
+    data: { vendorId: input.vendorId },
   });
 
   await db.workOrderEvent.create({
     data: {
-      organizationId,
+      ownerUserId,
       workOrderId,
       fromStatus: workOrder.status,
       toStatus: workOrder.status,
@@ -217,14 +223,14 @@ export async function reassignWorkOrder(
 
 export async function updateWorkOrderStatus(
   db: ScopedDb,
-  organizationId: string,
+  ownerUserId: string,
   workOrderId: string,
   input: { status: WorkOrderStatus; note?: string | null; actorUserId: string },
 ) {
   await db.$transaction(async (tx) => {
     const workOrder = assertFound(
       await tx.workOrder.findFirst({
-        where: { id: workOrderId, organizationId },
+        where: { id: workOrderId, ownerUserId },
         include: { request: true },
       }),
       'Work order not found.',
@@ -243,7 +249,7 @@ export async function updateWorkOrderStatus(
     );
 
     await tx.workOrder.updateMany({
-      where: { id: workOrderId, organizationId },
+      where: { id: workOrderId, ownerUserId },
       data: {
         status: input.status,
         ...(input.status === 'RESOLVED' ? { resolutionNote: input.note!.trim() } : {}),
@@ -253,7 +259,7 @@ export async function updateWorkOrderStatus(
 
     await tx.workOrderEvent.create({
       data: {
-        organizationId,
+        ownerUserId,
         workOrderId,
         fromStatus: workOrder.status,
         toStatus: input.status,
@@ -271,12 +277,12 @@ export async function updateWorkOrderStatus(
 
     if (workOrder.request.status !== requestStatus) {
       await tx.maintenanceRequest.updateMany({
-        where: { id: workOrder.requestId, organizationId },
+        where: { id: workOrder.requestId, ownerUserId },
         data: { status: requestStatus },
       });
       await tx.requestEvent.create({
         data: {
-          organizationId,
+          ownerUserId,
           requestId: workOrder.requestId,
           fromStatus: workOrder.request.status,
           toStatus: requestStatus,
@@ -290,7 +296,7 @@ export async function updateWorkOrderStatus(
 
 export async function cancelRequest(
   db: ScopedDb,
-  organizationId: string,
+  ownerUserId: string,
   requestId: string,
   input: { reason: string; actorUserId: string },
 ) {
@@ -299,7 +305,7 @@ export async function cancelRequest(
   await db.$transaction(async (tx) => {
     const request = assertFound(
       await tx.maintenanceRequest.findFirst({
-        where: { id: requestId, organizationId },
+        where: { id: requestId, ownerUserId },
         include: { workOrder: true },
       }),
       'Request not found.',
@@ -311,13 +317,13 @@ export async function cancelRequest(
     );
 
     await tx.maintenanceRequest.updateMany({
-      where: { id: requestId, organizationId },
+      where: { id: requestId, ownerUserId },
       data: { status: 'CANCELLED', cancelledReason: input.reason.trim() },
     });
 
     await tx.requestEvent.create({
       data: {
-        organizationId,
+        ownerUserId,
         requestId,
         fromStatus: request.status,
         toStatus: 'CANCELLED',
@@ -328,12 +334,12 @@ export async function cancelRequest(
 
     if (request.workOrder && request.workOrder.status !== 'CLOSED') {
       await tx.workOrder.updateMany({
-        where: { id: request.workOrder.id, organizationId },
+        where: { id: request.workOrder.id, ownerUserId },
         data: { status: 'CLOSED', closedAt: new Date() },
       });
       await tx.workOrderEvent.create({
         data: {
-          organizationId,
+          ownerUserId,
           workOrderId: request.workOrder.id,
           fromStatus: request.workOrder.status,
           toStatus: 'CLOSED',
@@ -345,11 +351,11 @@ export async function cancelRequest(
   });
 }
 
-export async function listAssignableMembers(db: ScopedDb) {
-  return db.membership.findMany({
+export async function listAssignableVendors(db: ScopedDb) {
+  return db.vendor.findMany({
     where: { status: 'ACTIVE' },
     include: { user: true },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { name: 'asc' },
   });
 }
 

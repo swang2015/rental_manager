@@ -7,8 +7,6 @@ import { ensureChargesForPeriod, recordAdjustment, recordPayment } from '@/lib/d
 import { monthKey } from '@/lib/domain/dates';
 import { fail, formDate, formMoneyCents, formValue, succeed } from '@/lib/actions/helpers';
 
-const MANAGER_ROLES = ['OWNER', 'PROPERTY_MANAGER'] as const;
-
 function periodFromForm(form: FormData) {
   const key =
     formValue(form, 'month') || monthKey(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1);
@@ -17,11 +15,11 @@ function periodFromForm(form: FormData) {
 }
 
 export async function ensureChargesAction(form: FormData): Promise<void> {
-  const { db, organizationId } = await requireManager([...MANAGER_ROLES]);
+  const { db, ownerUserId } = await requireManager();
   const period = periodFromForm(form);
   let created = 0;
   try {
-    created = await ensureChargesForPeriod(db, organizationId, period);
+    created = await ensureChargesForPeriod(db, ownerUserId, period);
   } catch (error) {
     fail('/rent', error, { month: period.key });
   }
@@ -30,11 +28,11 @@ export async function ensureChargesAction(form: FormData): Promise<void> {
 }
 
 export async function recordPaymentAction(form: FormData): Promise<void> {
-  const { db, organizationId, user } = await requireManager([...MANAGER_ROLES]);
+  const { db, ownerUserId, user } = await requireManager();
   const chargeId = formValue(form, 'chargeId');
   const month = formValue(form, 'month');
   try {
-    await recordPayment(db, organizationId, chargeId, {
+    await recordPayment(db, ownerUserId, chargeId, {
       amountCents: formMoneyCents(form, 'amount'),
       paidOn: formDate(form, 'paidOn'),
       method: formValue(form, 'method') as PaymentMethod,
@@ -50,11 +48,11 @@ export async function recordPaymentAction(form: FormData): Promise<void> {
 }
 
 export async function recordAdjustmentAction(form: FormData): Promise<void> {
-  const { db, organizationId, user } = await requireManager([...MANAGER_ROLES]);
+  const { db, ownerUserId, user } = await requireManager();
   const chargeId = formValue(form, 'chargeId');
   const month = formValue(form, 'month');
   try {
-    await recordAdjustment(db, organizationId, chargeId, {
+    await recordAdjustment(db, ownerUserId, chargeId, {
       amountCents: formMoneyCents(form, 'amount'),
       reason: formValue(form, 'reason'),
       createdByUserId: user.id,

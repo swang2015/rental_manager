@@ -1,11 +1,18 @@
 # RentEase
 
-A multi-tenant rental property management SaaS with two surfaces:
+A rental property management platform that connects property owners, tenants,
+and vendors:
 
-- **Manager workspace** — portfolio (properties and units), tenants, leases,
-  rent ledger, maintenance, and the operations dashboard.
+- **Owner workspace** — portfolio (properties and units), tenants, leases, rent
+  ledger, maintenance, vendors, and the operations dashboard.
 - **Tenant portal** — lease summary and history, rent and payment history,
   maintenance requests, and contact details.
+- **Vendor portal** — work orders assigned to the vendor, with status updates and
+  a job history.
+
+One email address can hold several roles at once (owner, tenant, and/or vendor).
+There is no organization layer: each property belongs to exactly one owner, and
+every owner sees only their own portfolio.
 
 Out of scope for this release: online payment collection, email/SMS delivery,
 accounting reports, document e-signature, mobile apps, and a public listing site.
@@ -43,8 +50,9 @@ pnpm dev
 ```
 
 Open <http://localhost:3000>. The first account you register at `/sign-up` becomes the
-platform administrator (superadmin). That is the only self-service registration:
-afterwards `/sign-up` closes and everyone else joins through invitation links.
+platform administrator (superadmin). Later sign-ups are account requests that the
+administrator approves; owners can also be invited directly. Tenants and vendors
+join through links their owner sends.
 
 If PostgreSQL was installed with Homebrew and is not on `PATH`:
 
@@ -54,82 +62,78 @@ export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
 
 ### Environment variables
 
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `APP_URL` | Public base URL, used for links |
-| `CRON_SECRET` | Bearer token for `/api/cron/generate-charges` |
+| Variable                | Purpose                                                   |
+| ----------------------- | --------------------------------------------------------- |
+| `DATABASE_URL`          | PostgreSQL connection string                              |
+| `APP_URL`               | Public base URL, used for links                           |
+| `CRON_SECRET`           | Bearer token for `/api/cron/generate-charges`             |
 | `SESSION_COOKIE_SECURE` | Set `true` behind HTTPS so the session cookie is `Secure` |
 
 ### Demo data
 
 `pnpm db:seed` is idempotent. All demo accounts use the password `password123`.
 
-| Account | Role |
-| --- | --- |
-| `admin@rental.test` | Platform administrator (superadmin, no organization) |
-| `owner@sunrise.test` | Owner, Sunrise Rentals |
-| `manager@sunrise.test` | Property manager, Sunrise Rentals |
-| `staff@sunrise.test` | Staff, Sunrise Rentals |
-| `tenant@sunrise.test` | Tenant portal, Sunrise Rentals |
-| `owner@harbor.test` | Owner, Harbor Homes |
-| `tenant@harbor.test` | Tenant portal, Harbor Homes |
+| Account              | Role                                               |
+| -------------------- | -------------------------------------------------- |
+| `admin@rental.test`  | Platform administrator (superadmin)                |
+| `owner@rental.test`  | Owner of Maple Court and Harbor View               |
+| `tenant@rental.test` | Tenant in Maple Court 1A                           |
+| `vendor@rental.test` | Vendor (Vic Plumbing Co.), assigned one work order |
 
-The seed creates overdue, partially paid, and paid charges and one in-progress
+The seed creates overdue, partially paid, and paid charges and an in-progress
 maintenance request, so every screen has something to show.
 
 ### Accounts and roles
 
-There is no self-service sign-up by default:
-
 1. The **first** account created at `/sign-up` is the **platform administrator**
-   (`isSuperAdmin`). Registration closes after that.
-2. The superadmin creates organizations at `/admin`, optionally generating an
-   **owner invitation link** for each one. Organizations are not tied to an email
-   address and one installation can hold many organizations.
-3. Owners invite property managers and staff from **Members**; managers invite
-   tenants from the tenant page. Invitations are links you copy and send — the app
-   does not send email.
-4. A superadmin can open any organization's workspace with full owner permissions
-   from `/admin`; the manager header shows an **All organizations** link to switch
-   back.
+   (`isSuperAdmin`).
+2. After that, anyone can submit an account request at `/sign-up` (owner, tenant,
+   or vendor). Requests stay `PENDING` until the administrator approves them at
+   `/admin`.
+3. The administrator can also generate an **owner invitation link**. Owners are
+   approved immediately when they accept it.
+4. Owners invite tenants from **Tenants** and vendors from **Vendors**. Invitations
+   are links you copy and send — the app does not send email. Accepting adds the
+   role to the account and creates the owner's tenant/vendor record.
+5. A superadmin can open any owner's workspace with full permissions from
+   `/admin`; the workspace header has a **Platform admin** link to switch back.
+6. One email can hold multiple roles. The header links to the other portals when
+   the signed-in account also has those roles.
 
-If a database already has users (for example, deployed before this model existed),
-promote an account instead of registering:
-
-```bash
-psql "$DATABASE_URL" -c \
-  'UPDATE "User" SET "isSuperAdmin" = true WHERE email = '\''you@example.com'\'';'
-```
+The current release resets the old organization-based schema (see the init
+migration). Existing organization data is intentionally discarded; after
+deploying, the first sign-up creates the new administrator.
 
 ## Scripts
 
-| Command | What it does |
-| --- | --- |
-| `pnpm dev` | Development server |
-| `pnpm build` | Production build |
-| `pnpm start` | Serve the production build |
-| `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm lint` | ESLint |
-| `pnpm test` | Vitest unit and integration tests |
-| `pnpm test:e2e` | Playwright suite (resets and seeds the test database; uses your installed Google Chrome) |
-| `pnpm db:migrate` | Create/apply migrations in development |
-| `pnpm db:deploy` | Apply migrations in production |
-| `pnpm db:seed` | Seed demo data |
-| `pnpm db:test:prepare` | Apply migrations to the test database |
+| Command                | What it does                                                                             |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| `pnpm dev`             | Development server                                                                       |
+| `pnpm build`           | Production build                                                                         |
+| `pnpm start`           | Serve the production build                                                               |
+| `pnpm typecheck`       | `tsc --noEmit`                                                                           |
+| `pnpm lint`            | ESLint                                                                                   |
+| `pnpm test`            | Vitest unit and integration tests                                                        |
+| `pnpm test:e2e`        | Playwright suite (resets and seeds the test database; uses your installed Google Chrome) |
+| `pnpm db:migrate`      | Create/apply migrations in development                                                   |
+| `pnpm db:deploy`       | Apply migrations in production                                                           |
+| `pnpm db:seed`         | Seed demo data                                                                           |
+| `pnpm db:test:prepare` | Apply migrations to the test database                                                    |
 
 ## Project layout
 
 ```text
 prisma/                 schema, migrations, seed
 src/app/(auth)/         sign-in, sign-up, accept invitation
-src/app/(manager)/      manager workspace (guarded layout)
+src/app/(manager)/      owner workspace (guarded layout)
 src/app/portal/         tenant portal (guarded layout)
-src/app/onboarding/     first-run organization creation
+src/app/vendor/         vendor portal (guarded layout)
+src/app/admin/          platform administration (superadmin only)
+src/app/onboarding/     pending account / waiting-for-invite screen
 src/app/api/cron/       scheduled charge generation
-src/lib/auth/           sessions, passwords, permissions, invitations, rate limit
+src/lib/auth/           sessions, passwords, invitations, rate limit
 src/lib/db.ts           lazy Prisma client for Node and Workers
-src/lib/db/             scopedDb organization isolation
+src/lib/db/             scopedDb owner isolation
 src/lib/domain/         business rules and queries
 src/lib/labels.ts       status labels and display helpers
 wrangler.jsonc          Cloudflare Worker + Hyperdrive config
@@ -141,15 +145,15 @@ docs/                   authorization, invitations, billing
 
 ## Key rules
 
-- Every organization-owned query goes through `scopedDb(orgId)`. Direct
+- Every owner-owned query goes through `scopedDb(ownerUserId)`. Direct
   `@/lib/db` imports outside auth/db/cron modules fail lint. See
   [docs/authorization.md](docs/authorization.md).
-- Every mutation is a server action that re-checks the caller's role.
+- Every mutation is a server action that re-checks the caller's role and ownership.
 - One active lease per unit is enforced by a partial unique index, not only by
   application code.
 - Charges are generated idempotently per lease per month; payment and adjustment
   amounts never exceed the outstanding balance. See [docs/billing.md](docs/billing.md).
-- Invitations are links copied by the manager; no email is sent. See
+- Invitations are links copied by the owner or administrator; no email is sent. See
   [docs/tenant-invitations.md](docs/tenant-invitations.md).
 
 ## Deploy to Cloudflare Workers
@@ -284,12 +288,12 @@ reads `DATABASE_URL` directly, and migrations run as the pre-deploy command.
 
 **2. Set the app service variables**
 
-| Variable | Value |
-| --- | --- |
-| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference the Postgres service) |
-| `APP_URL` | `https://<your-domain>` — set it after step 3, then redeploy |
-| `SESSION_COOKIE_SECURE` | `true` |
-| `CRON_SECRET` | long random string, e.g. `openssl rand -hex 32` |
+| Variable                | Value                                                         |
+| ----------------------- | ------------------------------------------------------------- |
+| `DATABASE_URL`          | `${{Postgres.DATABASE_URL}}` (reference the Postgres service) |
+| `APP_URL`               | `https://<your-domain>` — set it after step 3, then redeploy  |
+| `SESSION_COOKIE_SECURE` | `true`                                                        |
+| `CRON_SECRET`           | long random string, e.g. `openssl rand -hex 32`               |
 
 `railway.json` configures the rest:
 
@@ -301,9 +305,9 @@ reads `DATABASE_URL` directly, and migrations run as the pre-deploy command.
 **3. Generate a domain**
 
 **Settings → Networking → Generate Domain**, then copy the URL into `APP_URL` and
-redeploy. Open `https://<domain>/sign-up` to create the administrator account (only
-the first registration is accepted), then go to `/admin` to create your first
-organization and invite its owner. Sign in later at `https://<domain>/sign-in`.
+redeploy. Open `https://<domain>/sign-up` to create the administrator account, then
+use `/admin` to approve account requests or invite an owner. Sign in later at
+`https://<domain>/sign-in`.
 
 Demo data is optional: run `pnpm db:seed` once against the Railway database (from a
 one-off shell or `DATABASE_URL=<public URL> pnpm db:seed` from your machine).
@@ -334,12 +338,12 @@ railway up                                    # build and deploy this directory
 
 ## Test coverage map
 
-| Capability | Automated coverage |
-| --- | --- |
-| Organization isolation | `tests/isolation.test.ts` |
-| Authentication and roles | `tests/permissions.test.ts`, `tests/rate-limit.test.ts`, `e2e/auth.spec.ts` |
-| Portfolio and leases | `tests/lease.test.ts`, `e2e/manager.spec.ts` |
-| Rent billing | `tests/billing.test.ts`, `tests/dates.test.ts`, `e2e/manager.spec.ts` |
-| Tenant portal and maintenance | `e2e/portal.spec.ts` |
-| Dashboard | `e2e/manager.spec.ts` |
-| Invitations | `docs/tenant-invitations.md` (manual check), `e2e/auth.spec.ts` |
+| Capability                            | Automated coverage                                                    |
+| ------------------------------------- | --------------------------------------------------------------------- |
+| Owner isolation                       | `tests/isolation.test.ts`                                             |
+| Authentication, approval, and portals | `tests/rate-limit.test.ts`, `e2e/auth.spec.ts`                        |
+| Portfolio and leases                  | `tests/lease.test.ts`, `e2e/manager.spec.ts`                          |
+| Rent billing                          | `tests/billing.test.ts`, `tests/dates.test.ts`, `e2e/manager.spec.ts` |
+| Tenant portal and maintenance         | `e2e/portal.spec.ts`                                                  |
+| Vendor portal and work orders         | `e2e/portal.spec.ts`                                                  |
+| Invitations                           | `e2e/auth.spec.ts`, `e2e/manager.spec.ts`                             |

@@ -1,16 +1,15 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { Organization } from '@prisma/client';
+import type { UserRoleType } from '@prisma/client';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { scopedDb } from '@/lib/db/scoped';
-import type { ManagerRole } from '@/lib/auth/permissions';
 
 const SESSION_COOKIE = 'rm_session';
-/** Organization a superadmin is currently working inside. */
-export const ACTIVE_ORG_COOKIE = 'rm_org';
+/** Owner whose portfolio a superadmin is currently working inside. */
+export const ACTIVE_OWNER_COOKIE = 'rm_owner';
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-const ACTIVE_ORG_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+const ACTIVE_OWNER_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
 export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
@@ -39,7 +38,7 @@ export async function destroySession(): Promise<void> {
     await prisma.session.deleteMany({ where: { tokenHash: hashToken(token) } });
   }
   store.delete(SESSION_COOKIE);
-  store.delete(ACTIVE_ORG_COOKIE);
+  store.delete(ACTIVE_OWNER_COOKIE);
 }
 
 export async function getSessionUser() {
@@ -52,14 +51,15 @@ export async function getSessionUser() {
     include: {
       user: {
         include: {
-          memberships: {
+          roles: true,
+          tenancies: {
             where: { status: 'ACTIVE' },
-            include: { organization: true },
+            include: { owner: true },
             orderBy: { createdAt: 'asc' },
           },
-          tenantRecords: {
+          vendors: {
             where: { status: 'ACTIVE' },
-            include: { organization: true },
+            include: { owner: true },
             orderBy: { createdAt: 'asc' },
           },
         },
@@ -72,156 +72,134 @@ export async function getSessionUser() {
     await prisma.session.deleteMany({ where: { id: session.id } });
     return null;
   }
+  if (session.user.status === 'DISABLED') return null;
   return session.user;
 }
 
 export type SessionUser = NonNullable<Awaited<ReturnType<typeof getSessionUser>>>;
 
+export function hasRole(user: SessionUser, role: UserRoleType): boolean {
+  return user.roles.some((entry) => entry.role === role);
+}
+
 export function homePathForUser(user: SessionUser): string {
   if (user.isSuperAdmin) return '/admin';
-  if (user.memberships.length > 0) return '/dashboard';
-  if (user.tenantRecords.length > 0) return '/portal';
+  if (hasRole(user, 'OWNER')) return '/dashboard';
+  if (hasRole(user, 'VENDOR')) return '/vendor';
+  if (hasRole(user, 'TENANT')) return '/portal';
   return '/onboarding';
 }
 
-export async function requireUser(): Promise<SessionUser> {
-  const user = await getSessionUser();
-  if (!user) redirect('/sign-in');
-  return user;
-}
-
-async function selectedOrganizationForSuperAdmin(): Promise<Organization | null> {
+async function selectedOwnerForSuperAdmin() {
   const store = await cookies();
-  const selectedId = store.get(ACTIVE_ORG_COOKIE)?.value;
+  const selectedId = store.get(ACTIVE_OWNER_COOKIE)?.value;
   if (selectedId) {
-    const selected = await prisma.organization.findUnique({ where: { id: selectedId } });
+    const selected = await prisma.user.findFirst({
+      where: { id: selectedId, roles: { some: { role: 'OWNER' } } },
+    });
     if (selected) return selected;
   }
-  return prisma.organization.findFirst({ orderBy: { createdAt: 'asc' } });
+  return prisma.user.findFirst({
+    where: { roles: { some: { role: 'OWNER' } }, status: 'ACTIVE' },
+    orderBy: { createdAt: 'asc' },
+  });
 }
 
-function superAdminContext(user: SessionUser, organization: Organization) {
+function ownerContext(
+  user: SessionUser,
+  owner: NonNullable<Awaited<ReturnType<typeof selectedOwnerForSuperAdmin>>>,
+) {
   return {
     user,
-    membership: {
-      id: `superadmin:${organization.id}`,
-      role: 'OWNER' as ManagerRole,
-      status: 'ACTIVE' as const,
-      organizationId: organization.id,
-      userId: user.id,
-      organization,
-    },
-    organization,
-    organizationId: organization.id,
-    db: scopedDb(organization.id),
-    isSuperAdmin: true,
+    owner,
+    ownerUserId: owner.id,
+    timezone: owner.timezone,
+    db: scopedDb(owner.id),
+    isSuperAdmin: user.isSuperAdmin,
   };
 }
 
-export async function setActiveOrganizationCookie(organizationId: string): Promise<void> {
+export async function setActiveOwnerCookie(ownerUserId: string): Promise<void> {
   const store = await cookies();
-  store.set(ACTIVE_ORG_COOKIE, organizationId, {
+  store.set(ACTIVE_OWNER_COOKIE, ownerUserId, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.SESSION_COOKIE_SECURE === 'true',
     path: '/',
-    maxAge: ACTIVE_ORG_MAX_AGE_SECONDS,
+    maxAge: ACTIVE_OWNER_MAX_AGE_SECONDS,
   });
 }
 
-export async function requireSuperAdmin(): Promise<SessionUser> {
-  const user = await getSessionUser();
-  if (!user) redirect('/sign-in');
-  if (!user.isSuperAdmin) {
-    if (user.memberships.length > 0) redirect('/dashboard');
-    if (user.tenantRecords.length > 0) redirect('/portal');
-    redirect('/onboarding');
-  }
-  return user;
-}
-
-export async function getManagerContext() {
-  const user = await getSessionUser();
-  if (!user) return null;
-
-  if (user.isSuperAdmin) {
-    const organization = await selectedOrganizationForSuperAdmin();
-    if (!organization) return null;
-    return superAdminContext(user, organization);
-  }
-
-  const membership = user.memberships[0];
-  if (!membership) return null;
-  return {
-    user,
-    membership,
-    organization: membership.organization,
-    organizationId: membership.organizationId,
-    db: scopedDb(membership.organizationId),
-    isSuperAdmin: false,
-  };
-}
-
-export async function requireManager(allowedRoles?: ManagerRole[]) {
+/** Owners (and superadmins acting as an owner) working in the manager workspace. */
+export async function requireManager() {
   const user = await getSessionUser();
   if (!user) redirect('/sign-in');
 
-  // A superadmin can work inside any organization with full permissions.
   if (user.isSuperAdmin) {
-    const organization = await selectedOrganizationForSuperAdmin();
-    if (!organization) redirect('/admin');
-    return superAdminContext(user, organization);
+    const owner = await selectedOwnerForSuperAdmin();
+    if (!owner) redirect('/admin');
+    return ownerContext(user, owner);
   }
 
-  const membership = user.memberships[0];
-  if (!membership) {
-    if (user.tenantRecords.length > 0) redirect('/portal');
+  if (!hasRole(user, 'OWNER')) {
+    if (hasRole(user, 'VENDOR') && user.vendors.length > 0) redirect('/vendor');
+    if (hasRole(user, 'TENANT') && user.tenancies.length > 0) redirect('/portal');
     redirect('/onboarding');
   }
 
-  if (allowedRoles && !allowedRoles.includes(membership.role as ManagerRole)) {
-    redirect('/dashboard?error=You%20do%20not%20have%20permission%20for%20that%20action');
-  }
-
-  return {
-    user,
-    membership,
-    organization: membership.organization,
-    organizationId: membership.organizationId,
-    db: scopedDb(membership.organizationId),
-    isSuperAdmin: false,
-  };
-}
-
-export async function getTenantContext() {
-  const user = await getSessionUser();
-  if (!user) return null;
-  const tenant = user.tenantRecords[0];
-  if (!tenant) return null;
-  return {
-    user,
-    tenant,
-    organization: tenant.organization,
-    organizationId: tenant.organizationId,
-    db: scopedDb(tenant.organizationId),
-  };
+  return ownerContext(user, user);
 }
 
 export async function requireTenant() {
   const user = await getSessionUser();
   if (!user) redirect('/sign-in');
 
-  const tenant = user.tenantRecords[0];
-  if (!tenant) {
-    if (user.memberships.length > 0) redirect('/dashboard');
+  if (!hasRole(user, 'TENANT') || user.tenancies.length === 0) {
+    if (user.isSuperAdmin) redirect('/admin');
+    if (hasRole(user, 'OWNER')) redirect('/dashboard');
+    if (hasRole(user, 'VENDOR') && user.vendors.length > 0) redirect('/vendor');
     redirect('/onboarding');
   }
 
+  const tenant = user.tenancies[0];
   return {
     user,
     tenant,
-    organization: tenant.organization,
-    organizationId: tenant.organizationId,
-    db: scopedDb(tenant.organizationId),
+    owner: tenant.owner,
+    ownerUserId: tenant.ownerUserId,
+    timezone: tenant.owner.timezone,
+    db: scopedDb(tenant.ownerUserId),
   };
+}
+
+export async function requireVendor() {
+  const user = await getSessionUser();
+  if (!user) redirect('/sign-in');
+
+  if (!hasRole(user, 'VENDOR') || user.vendors.length === 0) {
+    if (user.isSuperAdmin) redirect('/admin');
+    if (hasRole(user, 'OWNER')) redirect('/dashboard');
+    if (hasRole(user, 'TENANT') && user.tenancies.length > 0) redirect('/portal');
+    redirect('/onboarding');
+  }
+
+  const vendor = user.vendors[0];
+  return {
+    user,
+    vendor,
+    owner: vendor.owner,
+    vendorIds: user.vendors.map((entry) => entry.id),
+  };
+}
+
+export async function requireSuperAdmin(): Promise<SessionUser> {
+  const user = await getSessionUser();
+  if (!user) redirect('/sign-in');
+  if (!user.isSuperAdmin) {
+    if (hasRole(user, 'OWNER')) redirect('/dashboard');
+    if (hasRole(user, 'VENDOR') && user.vendors.length > 0) redirect('/vendor');
+    if (hasRole(user, 'TENANT') && user.tenancies.length > 0) redirect('/portal');
+    redirect('/onboarding');
+  }
+  return user;
 }

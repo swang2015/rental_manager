@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireManager } from '@/lib/auth/session';
-import { listAssignableMembers, listCategories, listRequests } from '@/lib/domain/maintenance';
+import { listAssignableVendors, listCategories, listRequests } from '@/lib/domain/maintenance';
 import { listProperties, listUnits } from '@/lib/domain/properties';
 import { listTenants } from '@/lib/domain/tenants';
 import { createRequestOnBehalfAction } from '../maintenance-actions';
@@ -26,7 +26,15 @@ import {
   requestStatusTone,
 } from '@/lib/labels';
 
-const CATEGORIES = ['Plumbing', 'Electrical', 'Heating', 'Appliance', 'Structural', 'Pest', 'Other'];
+const CATEGORIES = [
+  'Plumbing',
+  'Electrical',
+  'Heating',
+  'Appliance',
+  'Structural',
+  'Pest',
+  'Other',
+];
 
 export default async function MaintenancePage({
   searchParams,
@@ -39,40 +47,39 @@ export default async function MaintenancePage({
   const status = searchParam(params, 'status') ?? '';
   const priority = searchParam(params, 'priority') ?? '';
   const category = searchParam(params, 'category') ?? '';
-  const assignee = searchParam(params, 'assignee') ?? '';
+  const vendorId = searchParam(params, 'vendor') ?? '';
   const search = searchParam(params, 'q') ?? '';
-  const isStaff = context.membership.role === 'STAFF';
-
-  const [requests, properties, members, categories, units, tenants] = await Promise.all([
+  const [requests, properties, vendors, categories, units, tenants] = await Promise.all([
     listRequests(context.db, {
       propertyId: propertyId || undefined,
       status: status || undefined,
       priority: priority || undefined,
       category: category || undefined,
-      assigneeMembershipId: isStaff ? context.membership.id : assignee || undefined,
+      vendorId: vendorId || undefined,
       search,
     }),
     listProperties(context.db),
-    listAssignableMembers(context.db),
+    listAssignableVendors(context.db),
     listCategories(context.db),
     listUnits(context.db),
     listTenants(context.db),
   ]);
-  const canManage = !isStaff;
   const categoryOptions = Array.from(new Set([...CATEGORIES, ...categories]));
 
   return (
     <>
-      <PageHeader
-        title="Maintenance"
-        subtitle={isStaff ? 'Work assigned to you.' : 'Repair requests and work orders.'}
-      />
+      <PageHeader title="Maintenance" subtitle="Repair requests and work orders." />
       <Alert error={searchParam(params, 'error')} ok={searchParam(params, 'ok')} />
 
       <Card className="mb-6">
         <form method="get" className="flex flex-wrap items-end gap-3">
           <Field label="Search" className="min-w-44 flex-1">
-            <input name="q" defaultValue={search} placeholder="Tenant or description" className={inputClass} />
+            <input
+              name="q"
+              defaultValue={search}
+              placeholder="Tenant or description"
+              className={inputClass}
+            />
           </Field>
           <Field label="Status" className="w-40">
             <select name="status" defaultValue={status} className={inputClass}>
@@ -114,24 +121,25 @@ export default async function MaintenancePage({
               ))}
             </select>
           </Field>
-          {!isStaff ? (
-            <Field label="Assignee" className="w-48">
-              <select name="assignee" defaultValue={assignee} className={inputClass}>
-                <option value="">Anyone</option>
-                {members.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.user.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          ) : null}
+          <Field label="Vendor" className="w-48">
+            <select name="vendor" defaultValue={vendorId} className={inputClass}>
+              <option value="">Anyone</option>
+              {vendors.map((vendor) => (
+                <option key={vendor.id} value={vendor.id}>
+                  {vendor.name}
+                  {vendor.company ? ` · ${vendor.company}` : ''}
+                </option>
+              ))}
+            </select>
+          </Field>
           <SubmitButton className={secondaryButtonClass}>Filter</SubmitButton>
         </form>
       </Card>
 
       <Card title="Request queue" className="mb-6">
-        <Table head={['Request', 'Unit', 'Category', 'Priority', 'Status', 'Assignee', 'Opened', '']}>
+        <Table
+          head={['Request', 'Unit', 'Category', 'Priority', 'Status', 'Assignee', 'Opened', '']}
+        >
           {requests.length === 0 ? (
             <EmptyRow colSpan={8}>No requests match this view.</EmptyRow>
           ) : (
@@ -150,7 +158,9 @@ export default async function MaintenancePage({
                 </td>
                 <td className="px-2 py-2 text-slate-600">{request.category}</td>
                 <td className="px-2 py-2">
-                  <Badge tone={priorityTone(request.priority)}>{PRIORITY_LABEL[request.priority]}</Badge>
+                  <Badge tone={priorityTone(request.priority)}>
+                    {PRIORITY_LABEL[request.priority]}
+                  </Badge>
                 </td>
                 <td className="px-2 py-2">
                   <Badge tone={requestStatusTone(request.status)}>
@@ -158,9 +168,11 @@ export default async function MaintenancePage({
                   </Badge>
                 </td>
                 <td className="px-2 py-2 text-slate-600">
-                  {request.workOrder?.assignee?.user.name ?? 'Unassigned'}
+                  {request.workOrder?.vendor?.name ?? 'Unassigned'}
                 </td>
-                <td className="px-2 py-2 text-slate-600">{request.createdAt.toISOString().slice(0, 10)}</td>
+                <td className="px-2 py-2 text-slate-600">
+                  {request.createdAt.toISOString().slice(0, 10)}
+                </td>
                 <td className="px-2 py-2 text-right">
                   <Link href={`/maintenance/${request.id}`} className="text-sm">
                     Open
@@ -172,14 +184,15 @@ export default async function MaintenancePage({
         </Table>
       </Card>
 
-      {canManage ? (
+      {
         <Card title="Log a request on a tenant's behalf">
           {tenants.length === 0 || units.length === 0 ? (
-            <p className="text-sm text-slate-600">
-              Add tenants and units before logging requests.
-            </p>
+            <p className="text-sm text-slate-600">Add tenants and units before logging requests.</p>
           ) : (
-            <form action={createRequestOnBehalfAction} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <form
+              action={createRequestOnBehalfAction}
+              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            >
               <Field label="Tenant">
                 <select name="tenantId" required defaultValue="" className={inputClass}>
                   <option value="" disabled>
@@ -231,7 +244,7 @@ export default async function MaintenancePage({
             </form>
           )}
         </Card>
-      ) : null}
+      }
     </>
   );
 }

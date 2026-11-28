@@ -35,7 +35,7 @@ export async function listTenantRequests(db: ScopedDb, tenantId: string) {
     where: { tenantId },
     include: {
       unit: { include: { property: true } },
-      workOrder: { include: { assignee: { include: { user: true } } } },
+      workOrder: { include: { vendor: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -46,7 +46,7 @@ export async function getTenantRequest(db: ScopedDb, tenantId: string, requestId
     where: { id: requestId, tenantId },
     include: {
       unit: { include: { property: true } },
-      workOrder: { include: { assignee: { include: { user: true } } } },
+      workOrder: { include: { vendor: true } },
       events: { orderBy: { createdAt: 'desc' } },
     },
   });

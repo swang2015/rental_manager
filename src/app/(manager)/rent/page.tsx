@@ -30,7 +30,8 @@ export default async function RentPage({
   const context = await requireManager();
   const params = await searchParams;
   const now = new Date();
-  const monthParam = searchParam(params, 'month') ?? monthKey(now.getUTCFullYear(), now.getUTCMonth() + 1);
+  const monthParam =
+    searchParam(params, 'month') ?? monthKey(now.getUTCFullYear(), now.getUTCMonth() + 1);
   const { year, month } = parseMonthKey(monthParam);
   const monthValue = monthKey(year, month);
   const status = searchParam(params, 'status') ?? '';
@@ -38,7 +39,7 @@ export default async function RentPage({
   const search = searchParam(params, 'q') ?? '';
 
   const [ledger, properties] = await Promise.all([
-    listCharges(context.db, context.organization.timezone, {
+    listCharges(context.db, context.timezone, {
       year,
       month,
       status: status as '' | 'unpaid' | 'partial' | 'paid' | 'overdue',
@@ -48,7 +49,7 @@ export default async function RentPage({
     listProperties(context.db),
   ]);
 
-  const canRecord = context.membership.role !== 'STAFF';
+  const canRecord = true;
 
   return (
     <>
@@ -80,7 +81,12 @@ export default async function RentPage({
             </select>
           </Field>
           <Field label="Tenant" className="w-48">
-            <input name="q" defaultValue={search} placeholder="Tenant name" className={inputClass} />
+            <input
+              name="q"
+              defaultValue={search}
+              placeholder="Tenant name"
+              className={inputClass}
+            />
           </Field>
           <SubmitButton className={secondaryButtonClass}>Apply</SubmitButton>
         </form>
@@ -156,7 +162,9 @@ export default async function RentPage({
         <code className="rounded bg-slate-100 px-1 py-0.5">
           GET /api/cron/generate-charges?month={monthValue}
         </code>{' '}
-        with <code className="rounded bg-slate-100 px-1 py-0.5">Authorization: Bearer $CRON_SECRET</code>.
+        with{' '}
+        <code className="rounded bg-slate-100 px-1 py-0.5">Authorization: Bearer $CRON_SECRET</code>
+        .
       </p>
     </>
   );

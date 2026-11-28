@@ -23,12 +23,15 @@ export async function GET(request: NextRequest) {
     period = { year, month: value };
   }
 
-  const organizations = await prisma.organization.findMany({ select: { id: true, name: true } });
-  const results: { organization: string; created: number }[] = [];
+  const owners = await prisma.user.findMany({
+    where: { status: 'ACTIVE', roles: { some: { role: 'OWNER' } } },
+    select: { id: true, name: true },
+  });
+  const results: { owner: string; created: number }[] = [];
 
-  for (const organization of organizations) {
-    const created = await ensureChargesForPeriod(scopedDb(organization.id), organization.id, period);
-    results.push({ organization: organization.name, created });
+  for (const owner of owners) {
+    const created = await ensureChargesForPeriod(scopedDb(owner.id), owner.id, period);
+    results.push({ owner: owner.name, created });
   }
 
   return NextResponse.json({ period, results });

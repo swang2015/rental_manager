@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui';
 
 export default async function PortalHomePage() {
   const context = await requireTenant();
-  const home = await getTenantHome(context.db, context.tenant.id, context.organization.timezone);
+  const home = await getTenantHome(context.db, context.tenant.id, context.timezone);
 
   return (
     <>
@@ -34,7 +34,9 @@ export default async function PortalHomePage() {
           <Stat
             label="Outstanding balance"
             value={formatMoney(home.outstanding)}
-            hint={home.overdue.length > 0 ? `${home.overdue.length} overdue charge(s)` : 'Up to date'}
+            hint={
+              home.overdue.length > 0 ? `${home.overdue.length} overdue charge(s)` : 'Up to date'
+            }
           />
         </div>
       ) : (
@@ -47,7 +49,10 @@ export default async function PortalHomePage() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Open maintenance requests" actions={<Badge tone="amber">{home.openRequests} open</Badge>}>
+        <Card
+          title="Open maintenance requests"
+          actions={<Badge tone="amber">{home.openRequests} open</Badge>}
+        >
           <p className="text-sm text-slate-600">
             Report a problem with your unit and follow its progress.
           </p>
@@ -55,7 +60,10 @@ export default async function PortalHomePage() {
             <Link href="/portal/maintenance" className={buttonClass}>
               Maintenance requests
             </Link>
-            <Link href="/portal/rent" className="px-3 py-2 text-sm font-medium text-slate-700 underline">
+            <Link
+              href="/portal/rent"
+              className="px-3 py-2 text-sm font-medium text-slate-700 underline"
+            >
               View rent history
             </Link>
           </p>
@@ -69,11 +77,14 @@ export default async function PortalHomePage() {
               {home.overdue.slice(0, 3).map((charge) => (
                 <li key={charge.id} className="flex items-center justify-between gap-3">
                   <span>
-                    {charge.periodStart.toISOString().slice(0, 7)} · due {formatDate(charge.dueDate)}
+                    {charge.periodStart.toISOString().slice(0, 7)} · due{' '}
+                    {formatDate(charge.dueDate)}
                   </span>
                   <span className="flex items-center gap-2">
                     {formatMoney(charge.balanceCents)}
-                    <Badge tone={chargeStatusTone(charge.status)}>{CHARGE_STATUS_LABEL[charge.status]}</Badge>
+                    <Badge tone={chargeStatusTone(charge.status)}>
+                      {CHARGE_STATUS_LABEL[charge.status]}
+                    </Badge>
                   </span>
                 </li>
               ))}

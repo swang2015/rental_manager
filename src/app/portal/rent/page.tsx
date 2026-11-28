@@ -1,19 +1,12 @@
 import { requireTenant } from '@/lib/auth/session';
 import { getTenantCharges } from '@/lib/domain/portal';
 import { formatDate, formatMoney } from '@/lib/domain/dates';
-import {
-  Badge,
-  Card,
-  EmptyRow,
-  PageHeader,
-  Stat,
-  Table,
-} from '@/components/ui';
+import { Badge, Card, EmptyRow, PageHeader, Stat, Table } from '@/components/ui';
 import { CHARGE_STATUS_LABEL, chargeStatusTone } from '@/lib/labels';
 
 export default async function PortalRentPage() {
   const context = await requireTenant();
-  const charges = await getTenantCharges(context.db, context.tenant.id, context.organization.timezone);
+  const charges = await getTenantCharges(context.db, context.tenant.id, context.timezone);
 
   const outstanding = charges.reduce((sum, charge) => sum + charge.balanceCents, 0);
   const overdue = charges.filter((charge) => charge.status === 'overdue');

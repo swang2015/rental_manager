@@ -13,14 +13,19 @@ import {
   updateProperty,
   updateUnit,
 } from '@/lib/domain/properties';
-import { fail, formMoneyCents, formNumber, formOptionalValue, formValue, succeed } from '@/lib/actions/helpers';
-
-const MANAGER_ROLES = ['OWNER', 'PROPERTY_MANAGER'] as const;
+import {
+  fail,
+  formMoneyCents,
+  formNumber,
+  formOptionalValue,
+  formValue,
+  succeed,
+} from '@/lib/actions/helpers';
 
 export async function createPropertyAction(form: FormData): Promise<void> {
-  const { db, organizationId } = await requireManager([...MANAGER_ROLES]);
+  const { db, ownerUserId } = await requireManager();
   try {
-    await createProperty(db, organizationId, {
+    await createProperty(db, ownerUserId, {
       name: formValue(form, 'name'),
       addressLine1: formValue(form, 'addressLine1'),
       city: formValue(form, 'city'),
@@ -36,7 +41,7 @@ export async function createPropertyAction(form: FormData): Promise<void> {
 }
 
 export async function updatePropertyAction(form: FormData): Promise<void> {
-  const { db } = await requireManager([...MANAGER_ROLES]);
+  const { db } = await requireManager();
   const propertyId = formValue(form, 'propertyId');
   try {
     await updateProperty(db, propertyId, {
@@ -55,7 +60,7 @@ export async function updatePropertyAction(form: FormData): Promise<void> {
 }
 
 export async function archivePropertyAction(form: FormData): Promise<void> {
-  const { db } = await requireManager([...MANAGER_ROLES]);
+  const { db } = await requireManager();
   const propertyId = formValue(form, 'propertyId');
   try {
     await archiveProperty(db, propertyId);
@@ -67,10 +72,10 @@ export async function archivePropertyAction(form: FormData): Promise<void> {
 }
 
 export async function createUnitAction(form: FormData): Promise<void> {
-  const { db, organizationId } = await requireManager([...MANAGER_ROLES]);
+  const { db, ownerUserId } = await requireManager();
   const propertyId = formValue(form, 'propertyId');
   try {
-    await createUnit(db, organizationId, propertyId, {
+    await createUnit(db, ownerUserId, propertyId, {
       label: formValue(form, 'label'),
       bedrooms: formNumber(form, 'bedrooms'),
       bathrooms: formNumber(form, 'bathrooms'),
@@ -84,7 +89,7 @@ export async function createUnitAction(form: FormData): Promise<void> {
 }
 
 export async function updateUnitAction(form: FormData): Promise<void> {
-  const { db } = await requireManager([...MANAGER_ROLES]);
+  const { db } = await requireManager();
   const propertyId = formValue(form, 'propertyId');
   const unitId = formValue(form, 'unitId');
   try {
@@ -102,7 +107,7 @@ export async function updateUnitAction(form: FormData): Promise<void> {
 }
 
 export async function setUnitStatusAction(form: FormData): Promise<void> {
-  const { db } = await requireManager([...MANAGER_ROLES]);
+  const { db } = await requireManager();
   const propertyId = formValue(form, 'propertyId');
   const unitId = formValue(form, 'unitId');
   const status = formValue(form, 'status');
@@ -120,7 +125,7 @@ export async function setUnitStatusAction(form: FormData): Promise<void> {
 }
 
 export async function archiveUnitAction(form: FormData): Promise<void> {
-  const { db } = await requireManager([...MANAGER_ROLES]);
+  const { db } = await requireManager();
   const propertyId = formValue(form, 'propertyId');
   try {
     await archiveUnit(db, formValue(form, 'unitId'));
@@ -132,7 +137,7 @@ export async function archiveUnitAction(form: FormData): Promise<void> {
 }
 
 export async function removeUnitAction(form: FormData): Promise<void> {
-  const { db } = await requireManager([...MANAGER_ROLES]);
+  const { db } = await requireManager();
   const propertyId = formValue(form, 'propertyId');
   try {
     await removeUnit(db, formValue(form, 'unitId'));

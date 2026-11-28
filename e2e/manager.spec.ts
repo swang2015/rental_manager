@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { selectByText, signIn } from './helpers';
+import { selectByText, signIn, signOut } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
 
 const PROPERTY = 'E2E Court';
 const UNIT_LABEL = '1';
 const TENANT = 'E2E Tenant';
-const TENANT_EMAIL = 'e2e.tenant@sunrise.test';
+const TENANT_EMAIL = 'e2e.tenant@example.test';
 const RENT = '1000.00';
 
 const now = new Date();
@@ -14,8 +14,8 @@ const thisMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padSt
 const startDate = `${thisMonth}-01`;
 const endDate = `${now.getUTCFullYear() + 1}-12-31`;
 
-test('manager adds a property and a unit', async ({ page }) => {
-  await signIn(page, 'manager@sunrise.test');
+test('owner adds a property and a unit', async ({ page }) => {
+  await signIn(page, 'owner@rental.test');
   await page.waitForURL('**/dashboard');
 
   await page.goto('/properties');
@@ -40,22 +40,36 @@ test('manager adds a property and a unit', async ({ page }) => {
   await expect(page.getByText('Available').first()).toBeVisible();
 });
 
-test('manager adds a tenant', async ({ page }) => {
-  await signIn(page, 'manager@sunrise.test');
+test('owner invites a tenant who accepts the link', async ({ page }) => {
+  await signIn(page, 'owner@rental.test');
   await page.waitForURL('**/dashboard');
 
   await page.goto('/tenants');
-  await page.getByLabel('Full name').fill(TENANT);
-  await page.getByLabel('Email').fill(TENANT_EMAIL);
-  await page.getByLabel('Phone').fill('+86 139 0000 0000');
-  await page.getByRole('button', { name: 'Add tenant' }).click();
+  await page.getByLabel('Tenant email').fill(TENANT_EMAIL);
+  await page.getByRole('button', { name: 'Create invitation link' }).click();
 
-  await expect(page.getByText('Tenant created.')).toBeVisible();
+  await expect(page.getByText(/Share this invitation link:/)).toBeVisible();
+  const invitePath = (await page.locator('code').first().innerText()).trim();
+  expect(invitePath).toMatch(/^\/accept-invitation\//);
+
+  await signOut(page);
+
+  await page.goto(invitePath);
+  await page.getByLabel('Your name').fill(TENANT);
+  await page.getByLabel('Password').fill('password123');
+  await page.getByRole('button', { name: 'Accept invitation' }).click();
+  await page.waitForURL('**/portal');
+
+  await signOut(page);
+
+  await signIn(page, 'owner@rental.test');
+  await page.waitForURL('**/dashboard');
+  await page.goto('/tenants');
   await expect(page.getByRole('link', { name: TENANT, exact: true })).toBeVisible();
 });
 
-test('manager creates, activates, and bills a lease', async ({ page }) => {
-  await signIn(page, 'manager@sunrise.test');
+test('owner creates, activates, and bills a lease', async ({ page }) => {
+  await signIn(page, 'owner@rental.test');
   await page.waitForURL('**/dashboard');
 
   await page.goto('/leases');
@@ -90,8 +104,8 @@ test('manager creates, activates, and bills a lease', async ({ page }) => {
   await expect(page.getByText('Paid', { exact: true }).first()).toBeVisible();
 });
 
-test('manager sees the new unit as occupied', async ({ page }) => {
-  await signIn(page, 'manager@sunrise.test');
+test('owner sees the new unit as occupied', async ({ page }) => {
+  await signIn(page, 'owner@rental.test');
   await page.waitForURL('**/dashboard');
 
   await page.goto('/properties');

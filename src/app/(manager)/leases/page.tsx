@@ -40,7 +40,7 @@ export default async function LeasesPage({
     listAvailableUnits(context.db),
     listTenants(context.db),
   ]);
-  const canManage = context.membership.role !== 'STAFF';
+  const canManage = true;
 
   return (
     <>
@@ -50,7 +50,12 @@ export default async function LeasesPage({
       <Card className="mb-6">
         <form method="get" className="flex flex-wrap items-end gap-3">
           <Field label="Search" className="min-w-48 flex-1">
-            <input name="q" defaultValue={search} placeholder="Tenant, unit, property" className={inputClass} />
+            <input
+              name="q"
+              defaultValue={search}
+              placeholder="Tenant, unit, property"
+              className={inputClass}
+            />
           </Field>
           <Field label="Status" className="w-40">
             <select name="status" defaultValue={status} className={inputClass}>
@@ -124,13 +129,19 @@ export default async function LeasesPage({
                   </option>
                   {units.map((unit) => (
                     <option key={unit.id} value={unit.id}>
-                      {unit.property.name} · {unit.label} · {(unit.rentAmountCents / 100).toFixed(2)}
+                      {unit.property.name} · {unit.label} ·{' '}
+                      {(unit.rentAmountCents / 100).toFixed(2)}
                     </option>
                   ))}
                 </select>
               </Field>
               <Field label="Tenant">
-                <select name="tenantId" required className={inputClass} defaultValue={presetTenantId}>
+                <select
+                  name="tenantId"
+                  required
+                  className={inputClass}
+                  defaultValue={presetTenantId}
+                >
                   <option value="" disabled>
                     Select a tenant
                   </option>
@@ -151,7 +162,15 @@ export default async function LeasesPage({
                 <input name="endDate" type="date" required className={inputClass} />
               </Field>
               <Field label="Rent due day" hint="1–28">
-                <input name="dueDay" type="number" min="1" max="28" defaultValue={5} required className={inputClass} />
+                <input
+                  name="dueDay"
+                  type="number"
+                  min="1"
+                  max="28"
+                  defaultValue={5}
+                  required
+                  className={inputClass}
+                />
               </Field>
               <Field label="Security deposit">
                 <input name="depositAmount" required placeholder="3200.00" className={inputClass} />

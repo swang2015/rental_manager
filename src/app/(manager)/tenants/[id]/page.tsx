@@ -3,13 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireManager } from '@/lib/auth/session';
 import { getTenant } from '@/lib/domain/tenants';
 import { formatDate } from '@/lib/domain/dates';
-import {
-  archiveTenantAction,
-  deleteTenantAction,
-  inviteTenantAction,
-  revokeTenantAccessAction,
-  updateTenantAction,
-} from '../../tenant-actions';
+import { archiveTenantAction, deleteTenantAction, updateTenantAction } from '../../tenant-actions';
 import { searchParam } from '@/lib/actions/helpers';
 import {
   Alert,
@@ -40,9 +34,6 @@ export default async function TenantDetailPage({
   const tenant = await getTenant(context.db, id);
   if (!tenant) notFound();
 
-  const canManage = context.membership.role !== 'STAFF';
-  const invitePath = searchParam(query, 'invite');
-
   return (
     <>
       <PageHeader
@@ -55,41 +46,31 @@ export default async function TenantDetailPage({
         }
       />
       <Alert error={searchParam(query, 'error')} ok={searchParam(query, 'ok')} />
-      {invitePath ? (
-        <p className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
-          Share this invitation link: <code>{invitePath}</code>
-        </p>
-      ) : null}
 
       <div className="mb-6 grid gap-4 lg:grid-cols-3">
-        <Card title="Portal access" className="lg:col-span-1">
-          <p className="mb-3 text-sm">
-            {tenant.portalUserId ? (
-              <Badge tone="green">Active portal account</Badge>
-            ) : (
-              <Badge>No portal account</Badge>
-            )}
+        <Card title="Account" className="lg:col-span-1">
+          <dl className="space-y-2 text-sm">
+            <div>
+              <dt className="text-slate-500">Sign-in email</dt>
+              <dd>{tenant.email}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Joined</dt>
+              <dd>{formatDate(tenant.createdAt)}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Status</dt>
+              <dd>
+                <Badge tone={tenant.status === 'ACTIVE' ? 'green' : 'gray'}>
+                  {tenant.status === 'ACTIVE' ? 'Active' : 'Archived'}
+                </Badge>
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-3 text-xs text-slate-500">
+            The tenant manages this account from the tenant portal. You can change their display
+            name and phone here.
           </p>
-          {canManage ? (
-            tenant.portalUserId ? (
-              <form action={revokeTenantAccessAction}>
-                <input type="hidden" name="tenantId" value={tenant.id} />
-                <SubmitButton
-                  className="text-sm text-rose-700 underline"
-                  confirm="Revoke portal access for this tenant?"
-                >
-                  Revoke access
-                </SubmitButton>
-              </form>
-            ) : (
-              <form action={inviteTenantAction}>
-                <input type="hidden" name="tenantId" value={tenant.id} />
-                <SubmitButton className={secondaryButtonClass} pendingLabel="Creating…">
-                  Create invitation link
-                </SubmitButton>
-              </form>
-            )
-          ) : null}
         </Card>
 
         <Card title="Leases" className="lg:col-span-2">
@@ -116,55 +97,50 @@ export default async function TenantDetailPage({
               ))
             )}
           </Table>
-          {canManage ? (
-            <p className="mt-3 text-sm">
-              <TextLink href={`/leases?tenantId=${tenant.id}`}>Create a lease for this tenant</TextLink>
-            </p>
-          ) : null}
+          <p className="mt-3 text-sm">
+            <TextLink href={`/leases?tenantId=${tenant.id}`}>
+              Create a lease for this tenant
+            </TextLink>
+          </p>
         </Card>
       </div>
 
-      {canManage ? (
-        <Card title="Tenant details">
-          <form action={updateTenantAction} className="grid gap-4 sm:grid-cols-3">
-            <input type="hidden" name="tenantId" value={tenant.id} />
-            <Field label="Full name">
-              <input name="name" defaultValue={tenant.name} required className={inputClass} />
-            </Field>
-            <Field label="Email">
-              <input name="email" type="email" defaultValue={tenant.email} required className={inputClass} />
-            </Field>
-            <Field label="Phone">
-              <input name="phone" defaultValue={tenant.phone ?? ''} className={inputClass} />
-            </Field>
-            <div className="flex flex-wrap items-center gap-4 sm:col-span-3">
-              <SubmitButton className={buttonClass} pendingLabel="Saving…">
-                Save tenant
-              </SubmitButton>
-            </div>
-          </form>
-          <div className="mt-4 flex flex-wrap gap-4 border-t border-slate-100 pt-4 text-sm">
-            <form action={archiveTenantAction}>
-              <input type="hidden" name="tenantId" value={tenant.id} />
-              <SubmitButton
-                className="text-slate-600 underline"
-                confirm="Archive this tenant? They leave the active list."
-              >
-                Archive tenant
-              </SubmitButton>
-            </form>
-            <form action={deleteTenantAction}>
-              <input type="hidden" name="tenantId" value={tenant.id} />
-              <SubmitButton
-                className="text-rose-700 underline"
-                confirm="Delete this tenant permanently? Tenants with lease history cannot be deleted."
-              >
-                Delete tenant
-              </SubmitButton>
-            </form>
+      <Card title="Tenant details">
+        <form action={updateTenantAction} className="grid gap-4 sm:grid-cols-2">
+          <input type="hidden" name="tenantId" value={tenant.id} />
+          <Field label="Display name">
+            <input name="name" defaultValue={tenant.name} required className={inputClass} />
+          </Field>
+          <Field label="Phone">
+            <input name="phone" defaultValue={tenant.phone ?? ''} className={inputClass} />
+          </Field>
+          <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
+            <SubmitButton className={buttonClass} pendingLabel="Saving…">
+              Save tenant
+            </SubmitButton>
           </div>
-        </Card>
-      ) : null}
+        </form>
+        <div className="mt-4 flex flex-wrap gap-4 border-t border-slate-100 pt-4 text-sm">
+          <form action={archiveTenantAction}>
+            <input type="hidden" name="tenantId" value={tenant.id} />
+            <SubmitButton
+              className="text-slate-600 underline"
+              confirm="Archive this tenant? They leave the active list."
+            >
+              Archive tenant
+            </SubmitButton>
+          </form>
+          <form action={deleteTenantAction}>
+            <input type="hidden" name="tenantId" value={tenant.id} />
+            <SubmitButton
+              className="text-rose-700 underline"
+              confirm="Delete this tenant permanently? Tenants with lease history cannot be deleted."
+            >
+              Delete tenant
+            </SubmitButton>
+          </form>
+        </div>
+      </Card>
     </>
   );
 }

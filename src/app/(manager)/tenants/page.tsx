@@ -1,11 +1,10 @@
 import Link from 'next/link';
 import { requireManager } from '@/lib/auth/session';
 import { listTenants } from '@/lib/domain/tenants';
-import { createTenantAction } from '../tenant-actions';
+import { inviteTenantAction } from '../tenant-actions';
 import { searchParam } from '@/lib/actions/helpers';
 import {
   Alert,
-  Badge,
   Card,
   EmptyRow,
   Field,
@@ -26,28 +25,39 @@ export default async function TenantsPage({
   const context = await requireManager();
   const params = await searchParams;
   const search = searchParam(params, 'q') ?? '';
-  const portalStatus = searchParam(params, 'portal') as 'active' | 'inactive' | undefined;
   const includeArchived = searchParam(params, 'archived') === 'true';
+  const invite = searchParam(params, 'invite');
 
-  const tenants = await listTenants(context.db, { search, portalStatus, includeArchived });
-  const canManage = context.membership.role !== 'STAFF';
+  const [tenants, invitations] = await Promise.all([
+    listTenants(context.db, { search, includeArchived }),
+    context.db.invitation.findMany({
+      where: { role: 'TENANT', acceptedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ]);
 
   return (
     <>
-      <PageHeader title="Tenants" subtitle="People who rent your units and their portal access." />
+      <PageHeader
+        title="Tenants"
+        subtitle="People who rent your units and can sign in to the portal."
+      />
       <Alert error={searchParam(params, 'error')} ok={searchParam(params, 'ok')} />
+      {invite ? (
+        <p className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+          Share this invitation link: <code>{invite}</code>
+        </p>
+      ) : null}
 
       <Card className="mb-6">
         <form method="get" className="flex flex-wrap items-end gap-3">
           <Field label="Search" className="min-w-56 flex-1">
-            <input name="q" defaultValue={search} placeholder="Name, email, phone" className={inputClass} />
-          </Field>
-          <Field label="Portal" className="w-44">
-            <select name="portal" defaultValue={portalStatus ?? ''} className={inputClass}>
-              <option value="">Any</option>
-              <option value="active">Active</option>
-              <option value="inactive">Not invited</option>
-            </select>
+            <input
+              name="q"
+              defaultValue={search}
+              placeholder="Name, email, phone"
+              className={inputClass}
+            />
           </Field>
           <label className="flex items-center gap-2 pb-2 text-sm">
             <input type="checkbox" name="archived" value="true" defaultChecked={includeArchived} />
@@ -58,9 +68,9 @@ export default async function TenantsPage({
       </Card>
 
       <Card title="Tenant records" className="mb-6">
-        <Table head={['Name', 'Email', 'Phone', 'Portal', 'Leases', '']}>
+        <Table head={['Name', 'Email', 'Phone', 'Leases', '']}>
           {tenants.length === 0 ? (
-            <EmptyRow colSpan={6}>No tenants match this view.</EmptyRow>
+            <EmptyRow colSpan={5}>No tenants yet. Invite one below.</EmptyRow>
           ) : (
             tenants.map((tenant) => (
               <tr key={tenant.id}>
@@ -69,9 +79,6 @@ export default async function TenantsPage({
                 </td>
                 <td className="px-2 py-2 text-slate-600">{tenant.email}</td>
                 <td className="px-2 py-2 text-slate-600">{tenant.phone ?? '—'}</td>
-                <td className="px-2 py-2">
-                  {tenant.portalUserId ? <Badge tone="green">Active</Badge> : <Badge>Not invited</Badge>}
-                </td>
                 <td className="px-2 py-2">{tenant._count.leases}</td>
                 <td className="px-2 py-2 text-right">
                   <Link href={`/tenants/${tenant.id}`} className="text-sm">
@@ -84,26 +91,40 @@ export default async function TenantsPage({
         </Table>
       </Card>
 
-      {canManage ? (
-        <Card title="Add a tenant">
-          <form action={createTenantAction} className="grid gap-4 sm:grid-cols-3">
-            <Field label="Full name">
-              <input name="name" required className={inputClass} />
-            </Field>
-            <Field label="Email">
-              <input name="email" type="email" required className={inputClass} />
-            </Field>
-            <Field label="Phone">
-              <input name="phone" className={inputClass} />
-            </Field>
-            <div className="sm:col-span-3">
-              <SubmitButton className={buttonClass} pendingLabel="Adding…">
-                Add tenant
-              </SubmitButton>
-            </div>
-          </form>
-        </Card>
-      ) : null}
+      <Card title="Invite a tenant" className="mb-6">
+        <p className="mb-3 text-sm text-slate-600">
+          The tenant signs in with this email and sees their own lease and rent. The record appears
+          here once they accept the link (valid for 7 days).
+        </p>
+        <form action={inviteTenantAction} className="flex flex-wrap items-end gap-3">
+          <Field label="Tenant email" className="min-w-64 flex-1">
+            <input
+              name="email"
+              type="email"
+              required
+              placeholder="tenant@example.com"
+              className={inputClass}
+            />
+          </Field>
+          <SubmitButton className={buttonClass} pendingLabel="Creating…">
+            Create invitation link
+          </SubmitButton>
+        </form>
+      </Card>
+
+      <Card title={`Pending invitations (${invitations.length})`}>
+        {invitations.length === 0 ? (
+          <p className="text-sm text-slate-600">No pending tenant invitations.</p>
+        ) : (
+          <ul className="space-y-1 text-sm text-slate-600">
+            {invitations.map((invitation) => (
+              <li key={invitation.id}>
+                {invitation.email} · expires {invitation.expiresAt.toISOString().slice(0, 10)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </>
   );
 }

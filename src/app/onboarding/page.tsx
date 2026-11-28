@@ -2,27 +2,43 @@ import { redirect } from 'next/navigation';
 import { signOutAction } from '../session-actions';
 import { Card, secondaryButtonClass } from '@/components/ui';
 import { SubmitButton } from '@/components/submit-button';
-import { getSessionUser } from '@/lib/auth/session';
+import { getSessionUser, hasRole } from '@/lib/auth/session';
+
+const ROLE_LABEL: Record<string, string> = {
+  OWNER: 'property owner',
+  TENANT: 'tenant',
+  VENDOR: 'vendor',
+};
 
 export default async function OnboardingPage() {
   const user = await getSessionUser();
   if (!user) redirect('/sign-in');
   if (user.isSuperAdmin) redirect('/admin');
-  if (user.memberships.length > 0) redirect('/dashboard');
-  if (user.tenantRecords.length > 0) redirect('/portal');
+  if (hasRole(user, 'OWNER')) redirect('/dashboard');
+  if (hasRole(user, 'VENDOR') && user.vendors.length > 0) redirect('/vendor');
+  if (hasRole(user, 'TENANT') && user.tenancies.length > 0) redirect('/portal');
+
+  const pending = user.status === 'PENDING';
+  const waitingForOwner = hasRole(user, 'TENANT') || hasRole(user, 'VENDOR');
 
   return (
     <div className="mx-auto max-w-lg px-4 py-12">
       <h1 className="text-2xl font-semibold">Welcome, {user.name}</h1>
       <p className="mt-1 mb-6 text-sm text-slate-600">
-        Your account is not linked to an organization yet. Organizations are created by the platform
-        administrator; ask them to send you an invitation link. Once you accept it, this account
-        opens the right workspace automatically.
+        {pending
+          ? 'Your account request is waiting for a platform administrator to review it.'
+          : waitingForOwner
+            ? 'Your account is approved, but an owner has not linked you to their portfolio yet.'
+            : 'Your account does not have an active role on this platform yet.'}
       </p>
-      <Card title="Waiting for an invitation">
+      <Card title={pending ? 'Account under review' : 'Waiting for an invitation'}>
         <p className="text-sm text-slate-600">
-          Invitations expire after 7 days and only work for the email address they were sent to. If
-          your link has expired, ask the administrator for a new one.
+          {user.requestedRole
+            ? `You asked to join as a ${ROLE_LABEL[user.requestedRole] ?? user.requestedRole.toLowerCase()}. `
+            : ''}
+          {waitingForOwner
+            ? 'Ask the property owner to send you an invitation link from their workspace. The link is valid for 7 days and only works for this email address.'
+            : 'A platform administrator will approve your account. You can sign in again later to check the status.'}
         </p>
       </Card>
       <form action={signOutAction} className="mt-6">

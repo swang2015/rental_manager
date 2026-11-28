@@ -33,10 +33,10 @@ export default async function ChargeDetailPage({
   const { chargeId } = await params;
   const query = await searchParams;
   const month = searchParam(query, 'month') ?? new Date().toISOString().slice(0, 7);
-  const charge = await getCharge(context.db, context.organization.timezone, chargeId);
+  const charge = await getCharge(context.db, context.timezone, chargeId);
   if (!charge) notFound();
 
-  const canRecord = context.membership.role !== 'STAFF';
+  const canRecord = true;
 
   return (
     <>
@@ -74,7 +74,9 @@ export default async function ChargeDetailPage({
                 <tr key={payment.id}>
                   <td className="px-2 py-2">{formatDate(payment.paidOn)}</td>
                   <td className="px-2 py-2">{formatMoney(payment.amountCents)}</td>
-                  <td className="px-2 py-2 text-slate-600">{payment.method.replace('_', ' ').toLowerCase()}</td>
+                  <td className="px-2 py-2 text-slate-600">
+                    {payment.method.replace('_', ' ').toLowerCase()}
+                  </td>
                   <td className="px-2 py-2 text-slate-600">{payment.reference ?? '—'}</td>
                 </tr>
               ))
