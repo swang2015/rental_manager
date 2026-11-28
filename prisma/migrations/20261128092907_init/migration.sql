@@ -106,7 +106,6 @@ CREATE TABLE "Tenant" (
 -- CreateTable
 CREATE TABLE "Vendor" (
     "id" TEXT NOT NULL,
-    "ownerUserId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "company" TEXT,
@@ -319,13 +318,13 @@ CREATE INDEX "Tenant_userId_idx" ON "Tenant"("userId");
 CREATE UNIQUE INDEX "Tenant_ownerUserId_userId_key" ON "Tenant"("ownerUserId", "userId");
 
 -- CreateIndex
-CREATE INDEX "Vendor_ownerUserId_status_idx" ON "Vendor"("ownerUserId", "status");
+CREATE INDEX "Vendor_status_trade_idx" ON "Vendor"("status", "trade");
+CREATE INDEX "Vendor_name_idx" ON "Vendor"("name");
 
 -- CreateIndex
-CREATE INDEX "Vendor_userId_idx" ON "Vendor"("userId");
+CREATE UNIQUE INDEX "Vendor_userId_key" ON "Vendor"("userId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Vendor_ownerUserId_userId_key" ON "Vendor"("ownerUserId", "userId");
 
 -- CreateIndex
 CREATE INDEX "Property_ownerUserId_archivedAt_idx" ON "Property"("ownerUserId", "archivedAt");
@@ -415,7 +414,6 @@ ALTER TABLE "Tenant" ADD CONSTRAINT "Tenant_ownerUserId_fkey" FOREIGN KEY ("owne
 ALTER TABLE "Tenant" ADD CONSTRAINT "Tenant_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Vendor" ADD CONSTRAINT "Vendor_ownerUserId_fkey" FOREIGN KEY ("ownerUserId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Vendor" ADD CONSTRAINT "Vendor_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
